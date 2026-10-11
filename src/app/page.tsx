@@ -1,3 +1,4 @@
+import { VideoPlayer } from "@/components/video-player";
 import {
   cctvFeeds,
   detectionEvents,
@@ -146,24 +147,7 @@ function VideoWorkspace({ feed, events }: { feed: CctvFeed; events: DetectionEve
         <StatusPill status={feed.status} />
       </div>
 
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-[1.5rem] border border-cyan-300/20 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.22),transparent_35%),linear-gradient(135deg,#101827,#05080d)]">
-        <div className="absolute inset-x-0 top-0 flex items-center justify-between border-b border-white/10 bg-black/30 px-5 py-3 text-xs text-slate-300 backdrop-blur">
-          <span>SIMULATED HLS PREVIEW</span>
-          <span>AI overlay · candidate mode</span>
-        </div>
-
-        <div className="absolute left-[18%] top-[34%] h-24 w-36 rounded-xl border-2 border-rose-400 bg-rose-500/10 shadow-[0_0_40px_rgba(244,63,94,0.35)]" />
-        <div className="absolute right-[20%] top-[48%] h-20 w-32 rounded-xl border-2 border-cyan-300 bg-cyan-400/10" />
-        <div className="absolute bottom-[25%] left-[42%] h-16 w-28 rounded-xl border-2 border-amber-300 bg-amber-400/10" />
-
-        <div className="z-10 max-w-md rounded-3xl border border-white/10 bg-black/45 p-6 text-center backdrop-blur">
-          <p className="text-sm font-medium text-cyan-200">실제 CCTV 연결 전</p>
-          <h3 className="mt-2 text-3xl font-semibold tracking-tight text-white">관제 UX 플레이스홀더</h3>
-          <p className="mt-3 text-sm leading-6 text-slate-300">
-            API 키/약관/트래픽/저장 가능 여부 확인 전까지 실제 영상을 저장하거나 대량 호출하지 않습니다.
-          </p>
-        </div>
-      </div>
+      <VideoPlayer feed={feed} />
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         {events.slice(0, 3).map((event) => (

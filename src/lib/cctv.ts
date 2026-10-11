@@ -15,7 +15,8 @@ export type CctvFeed = {
     lng: number;
   };
   status: FeedStatus;
-  streamType: "HLS" | "HTTPS HLS" | "SNAPSHOT";
+  streamType: "HLS" | "HTTPS HLS" | "MP4" | "HTTPS MP4" | "SNAPSHOT";
+  streamUrl?: string;
   latencySeconds: number;
   source: string;
   licenseNote: string;
