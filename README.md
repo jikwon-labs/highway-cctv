@@ -7,6 +7,7 @@
 - Next.js App Router + TypeScript + Tailwind CSS 기반 웹 앱
 - CCTV 피드 목록/상태/지연시간 샘플 데이터
 - 선택 CCTV 관제 플레이스홀더
+- 좌표 기반 CCTV 지도 화면 및 지도 지점 클릭 선택
 - 감지 후보 패널
 - CCTV 상태 필터/선택 인터랙션
 - 이벤트 확인/오탐/대기 검토 상태 변경

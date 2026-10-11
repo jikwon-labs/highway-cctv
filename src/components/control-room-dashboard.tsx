@@ -18,6 +18,7 @@ import {
   filterFeedsByStatus,
   getEventsForFeed,
   getNextSelectedFeedId,
+  normalizeFeedToMap,
   updateEventReviewStatus,
   type FeedStatusFilter,
 } from "@/lib/dashboard";
@@ -32,6 +33,12 @@ const statusClass: Record<FeedStatus, string> = {
   online: "border-[#24a148] bg-[#defbe6] text-[#0e6027]",
   degraded: "border-[#f1c21b] bg-[#fcf4d6] text-[#684e00]",
   offline: "border-[#da1e28] bg-[#fff1f1] text-[#a2191f]",
+};
+
+const statusDotClass: Record<FeedStatus, string> = {
+  online: "bg-[#24a148]",
+  degraded: "bg-[#f1c21b]",
+  offline: "bg-[#da1e28]",
 };
 
 const severityClass: Record<EventSeverity, string> = {
@@ -136,7 +143,12 @@ export function ControlRoomDashboard({
             onFilterChange={handleFilterChange}
           />
           {selectedFeed ? (
-            <VideoWorkspace feed={selectedFeed} events={selectedFeedEvents} />
+            <VideoWorkspace
+              feed={selectedFeed}
+              feeds={visibleFeeds.length > 0 ? visibleFeeds : feeds}
+              events={selectedFeedEvents}
+              onSelectFeed={setSelectedFeedId}
+            />
           ) : (
             <EmptyPanel />
           )}
@@ -268,7 +280,17 @@ function FeedList({
   );
 }
 
-function VideoWorkspace({ feed, events }: { feed: CctvFeed; events: DetectionEvent[] }) {
+function VideoWorkspace({
+  feed,
+  feeds,
+  events,
+  onSelectFeed,
+}: {
+  feed: CctvFeed;
+  feeds: CctvFeed[];
+  events: DetectionEvent[];
+  onSelectFeed: (feedId: string) => void;
+}) {
   const visibleEvents = events.length > 0 ? events : [];
 
   return (
@@ -284,10 +306,11 @@ function VideoWorkspace({ feed, events }: { feed: CctvFeed; events: DetectionEve
         <StatusPill status={feed.status} />
       </div>
 
-      <div className="flex flex-1 flex-col p-4">
+      <div className="flex flex-1 flex-col gap-4 p-4">
+        <CctvMap feeds={feeds} selectedFeed={feed} onSelectFeed={onSelectFeed} />
         <VideoPlayer feed={feed} />
 
-        <div className="mt-4 grid gap-px border border-[#e0e0e0] bg-[#e0e0e0] md:grid-cols-3">
+        <div className="grid gap-px border border-[#e0e0e0] bg-[#e0e0e0] md:grid-cols-3">
           {visibleEvents.length > 0 ? (
             visibleEvents.slice(0, 3).map((event) => (
               <article key={event.id} className="bg-white p-4">
@@ -305,6 +328,103 @@ function VideoWorkspace({ feed, events }: { feed: CctvFeed; events: DetectionEve
         </div>
       </div>
     </section>
+  );
+}
+
+function CctvMap({
+  feeds,
+  selectedFeed,
+  onSelectFeed,
+}: {
+  feeds: CctvFeed[];
+  selectedFeed: CctvFeed;
+  onSelectFeed: (feedId: string) => void;
+}) {
+  return (
+    <section className="border border-[#e0e0e0] bg-[#f4f4f4]">
+      <div className="flex flex-col gap-1 border-b border-[#e0e0e0] bg-white p-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="font-mono text-xs text-[#525252]">지도 화면</p>
+          <h3 className="mt-1 text-xl font-normal text-[#161616]">CCTV 위치 선택</h3>
+        </div>
+        <p className="text-sm text-[#525252]">지도 지점을 클릭하면 해당 CCTV 화면으로 이동합니다.</p>
+      </div>
+
+      <div className="relative h-[360px] overflow-hidden bg-[#eef2f3]">
+        <MapBackground />
+        {feeds.map((feed) => {
+          const point = normalizeFeedToMap(feeds, feed);
+          const selected = feed.id === selectedFeed.id;
+
+          return (
+            <button
+              key={feed.id}
+              aria-label={`지도에서 ${feed.name} 선택`}
+              className={`group absolute z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 border bg-white px-2 py-1 text-xs shadow-sm transition hover:border-[#0f62fe] hover:bg-[#edf5ff] ${
+                selected ? "border-[#0f62fe] ring-2 ring-[#0f62fe]/20" : "border-[#8d8d8d]"
+              }`}
+              style={{ left: `${point.x}%`, top: `${point.y}%` }}
+              type="button"
+              onClick={() => onSelectFeed(feed.id)}
+            >
+              <span className={`h-2.5 w-2.5 rounded-full border border-white ${statusDotClass[feed.status]}`} />
+              <span className="max-w-20 truncate text-[#161616]">{feed.name}</span>
+            </button>
+          );
+        })}
+
+        <div className="absolute bottom-4 left-4 right-4 z-20 grid gap-px border border-[#c6c6c6] bg-[#c6c6c6] md:grid-cols-4">
+          <MapInfo label="선택" value={selectedFeed.name} />
+          <MapInfo label="노선" value={selectedFeed.route} />
+          <MapInfo label="방향" value={selectedFeed.direction} />
+          <MapInfo
+            label="좌표"
+            value={`${selectedFeed.coordinates.lat.toFixed(3)}, ${selectedFeed.coordinates.lng.toFixed(3)}`}
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MapBackground() {
+  return (
+    <svg
+      className="absolute inset-0 h-full w-full"
+      role="img"
+      aria-label="수도권 고속도로 개략 지도"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+    >
+      <rect width="100" height="100" fill="#eef2f3" />
+      <path d="M4 66 C 25 58, 43 54, 96 60" fill="none" stroke="#c6c6c6" strokeWidth="1.3" />
+      <path d="M16 22 C 34 38, 44 48, 60 92" fill="none" stroke="#c6c6c6" strokeWidth="1.2" />
+      <path d="M8 84 C 26 74, 42 66, 78 70" fill="none" stroke="#d0d7da" strokeWidth="0.9" />
+      <path d="M66 10 C 64 32, 70 50, 92 88" fill="none" stroke="#d0d7da" strokeWidth="0.9" />
+      <path d="M52 18 C 40 34, 36 56, 44 92" fill="none" stroke="#ffffff" strokeWidth="0.35" strokeDasharray="2 2" />
+      <path d="M8 46 H 96" fill="none" stroke="#ffffff" strokeWidth="0.35" strokeDasharray="2 2" />
+      <text x="6" y="12" fill="#6f6f6f" fontSize="4" fontFamily="monospace">
+        N
+      </text>
+      <text x="79" y="18" fill="#8d8d8d" fontSize="3.2" fontFamily="monospace">
+        중부
+      </text>
+      <text x="12" y="79" fill="#8d8d8d" fontSize="3.2" fontFamily="monospace">
+        서해안
+      </text>
+      <text x="40" y="51" fill="#8d8d8d" fontSize="3.2" fontFamily="monospace">
+        경부
+      </text>
+    </svg>
+  );
+}
+
+function MapInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-white px-3 py-2">
+      <p className="font-mono text-[11px] text-[#6f6f6f]">{label}</p>
+      <p className="mt-1 truncate text-sm text-[#161616]">{value}</p>
+    </div>
   );
 }
 
