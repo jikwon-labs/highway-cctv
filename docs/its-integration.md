@@ -5,6 +5,8 @@
 ## 필요한 환경 변수
 
 ```bash
+# 기본값은 mock입니다. 실제 호출 전 약관/한도/저장 가능 여부를 먼저 확인합니다.
+CCTV_SOURCE_MODE=mock
 ITS_API_KEY="발급받은 ITS 인증키"
 ```
 
@@ -22,6 +24,8 @@ ITS_API_KEY="발급받은 ITS 인증키"
 - API 키 마스킹 유틸
 - ITS 응답 `data` 단일/배열 파서
 - ITS 레코드 → 앱 `CctvFeed` 스키마 변환
+- mock/ITS 공통 source adapter 계층
+- `/api/cctv`에서 환경 변수 기반 source adapter 선택
 - HLS.js 기반 클라이언트 플레이어 컴포넌트
 - streamUrl이 없을 때 안전한 플레이스홀더 표시
 

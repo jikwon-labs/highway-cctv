@@ -17,7 +17,8 @@
 - 이벤트 우선순위/관제 요약 도메인 로직
 - HLS.js 기반 플레이어 컴포넌트
 - ITS CCTV API URL 빌더/응답 매핑 유틸
-- `/api/cctv` mock API route와 대시보드 갱신 버튼
+- mock/ITS 공통 source adapter 계층
+- `/api/cctv` source adapter route와 대시보드 갱신 버튼
 - API 키 마스킹 유틸
 - Vitest 단위 테스트
 
