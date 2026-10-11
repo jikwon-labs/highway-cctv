@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildCctvSnapshot, mergeCctvSnapshot } from "./cctv-api";
+import { buildCctvSnapshot, getCctvSourceLabel, mergeCctvSnapshot } from "./cctv-api";
 import { cctvFeeds, detectionEvents } from "./cctv";
 
 describe("CCTV mock API snapshot", () => {
@@ -27,5 +27,10 @@ describe("CCTV mock API snapshot", () => {
 
     expect(merged.events.find((event) => event.id === "evt-stopped-vehicle-01")?.reviewStatus).toBe("confirmed");
     expect(merged.events.find((event) => event.id === "evt-wrong-way-01")?.reviewStatus).toBe("needs_review");
+  });
+
+  it("대시보드에 표시할 소스 라벨을 만든다", () => {
+    expect(getCctvSourceLabel("mock")).toBe("mock 데이터");
+    expect(getCctvSourceLabel("its")).toBe("ITS 실제 소스");
   });
 });

@@ -19,6 +19,7 @@
 - ITS CCTV API URL 빌더/응답 매핑 유틸
 - mock/ITS 공통 source adapter 계층
 - `/api/cctv` source adapter route와 대시보드 갱신 버튼
+- ITS 실제 호출 전 좌표 박스 안전 가드, 60초 캐시, 502 오류 응답
 - API 키 마스킹 유틸
 - Vitest 단위 테스트
 

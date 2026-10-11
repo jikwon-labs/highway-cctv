@@ -29,6 +29,10 @@ export function buildCctvSnapshot(
   };
 }
 
+export function getCctvSourceLabel(source: CctvSnapshot["meta"]["source"]): string {
+  return source === "its" ? "ITS 실제 소스" : "mock 데이터";
+}
+
 export function mergeCctvSnapshot(
   snapshot: CctvSnapshot,
   localEvents: DetectionEvent[],

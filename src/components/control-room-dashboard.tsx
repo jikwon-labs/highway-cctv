@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 import { VideoPlayer } from "@/components/video-player";
 import type { CctvSnapshot } from "@/lib/cctv-api";
-import { mergeCctvSnapshot } from "@/lib/cctv-api";
+import { getCctvSourceLabel, mergeCctvSnapshot } from "@/lib/cctv-api";
 import {
   getControlRoomSummary,
   getTopPriorityEvents,
@@ -181,7 +181,7 @@ export function ControlRoomDashboard({
       setFeeds(mergedSnapshot.feeds);
       setEvents(mergedSnapshot.events);
       setSelectedFeedId((currentFeedId) => getNextSelectedFeedId(nextVisibleFeeds, currentFeedId));
-      setApiStatus(`${snapshot.meta.source} · ${snapshot.meta.generatedAt.slice(11, 19)} 갱신`);
+      setApiStatus(`${getCctvSourceLabel(snapshot.meta.source)} · ${snapshot.meta.generatedAt.slice(11, 19)} 갱신`);
     } catch (error) {
       setApiStatus(error instanceof Error ? `갱신 실패 · ${error.message}` : "갱신 실패");
     } finally {

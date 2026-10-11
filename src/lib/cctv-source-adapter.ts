@@ -28,6 +28,9 @@ const defaultItsParams: Omit<ItsCctvInfoParams, "apiKey"> = {
   responseType: "json",
 };
 
+const maxItsCoordinateSpan = 1;
+const maxItsCoordinateArea = 0.75;
+
 export function createMockCctvSourceAdapter({
   feeds = cctvFeeds,
   events = detectionEvents,
@@ -50,15 +53,27 @@ export function createItsCctvSourceAdapter({
   params = defaultItsParams,
   fetcher = fetchItsJson,
   now = () => new Date(),
+  cacheTtlMs = 60_000,
 }: {
   apiKey: string;
   params?: Omit<ItsCctvInfoParams, "apiKey">;
   fetcher?: ItsFetcher;
   now?: Clock;
+  cacheTtlMs?: number;
 }): CctvSourceAdapter {
+  let cachedSnapshot: CctvSnapshot | undefined;
+  let cachedAtMs = 0;
+
   return {
     id: "its",
     async getSnapshot() {
+      const requestedAt = now();
+
+      if (cachedSnapshot && requestedAt.getTime() - cachedAtMs < cacheTtlMs) {
+        return cloneSnapshot(cachedSnapshot);
+      }
+
+      validateItsRequestPolicy(params);
       const url = buildItsCctvInfoUrl({
         apiKey,
         ...params,
@@ -68,9 +83,21 @@ export function createItsCctvSourceAdapter({
         payload as Parameters<typeof parseItsCctvResponse>[0],
       ).map(mapItsCctvRecordToFeed);
 
-      return buildCctvSnapshot(feeds, [], now(), "its");
+      cachedSnapshot = buildCctvSnapshot(feeds, [], requestedAt, "its");
+      cachedAtMs = requestedAt.getTime();
+
+      return cloneSnapshot(cachedSnapshot);
     },
   };
+}
+
+function cloneSnapshot(snapshot: CctvSnapshot): CctvSnapshot {
+  return buildCctvSnapshot(
+    snapshot.feeds,
+    snapshot.events,
+    new Date(snapshot.meta.generatedAt),
+    snapshot.meta.source,
+  );
 }
 
 export function getConfiguredCctvSourceAdapter(env: {
@@ -84,6 +111,18 @@ export function getConfiguredCctvSourceAdapter(env: {
   }
 
   return createMockCctvSourceAdapter();
+}
+
+function validateItsRequestPolicy(params: Omit<ItsCctvInfoParams, "apiKey">) {
+  const lngSpan = Math.abs(params.maxX - params.minX);
+  const latSpan = Math.abs(params.maxY - params.minY);
+  const area = lngSpan * latSpan;
+
+  if (lngSpan > maxItsCoordinateSpan || latSpan > maxItsCoordinateSpan || area > maxItsCoordinateArea) {
+    throw new Error(
+      `ITS request blocked: coordinate box too large (${lngSpan.toFixed(2)} x ${latSpan.toFixed(2)})`,
+    );
+  }
 }
 
 function parseSourceMode(value: string | undefined): CctvSourceMode {
