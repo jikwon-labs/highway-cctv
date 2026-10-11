@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Highway CCTV AI",
-  description: "웹 기반 고속도로 CCTV AI 관제 보조 MVP",
+  title: "고속도로 CCTV 관제",
+  description: "공개 CCTV 상태와 감지 후보를 확인하는 관제 보조 MVP",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

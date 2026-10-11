@@ -29,20 +29,26 @@ const statusLabel: Record<FeedStatus, string> = {
 };
 
 const statusClass: Record<FeedStatus, string> = {
-  online: "border-emerald-400/40 bg-emerald-400/10 text-emerald-200",
-  degraded: "border-amber-400/40 bg-amber-400/10 text-amber-200",
-  offline: "border-rose-400/40 bg-rose-400/10 text-rose-200",
+  online: "border-[#24a148] bg-[#defbe6] text-[#0e6027]",
+  degraded: "border-[#f1c21b] bg-[#fcf4d6] text-[#684e00]",
+  offline: "border-[#da1e28] bg-[#fff1f1] text-[#a2191f]",
 };
 
 const severityClass: Record<EventSeverity, string> = {
-  critical: "border-rose-400/50 bg-rose-500/15 text-rose-100",
-  warning: "border-amber-400/50 bg-amber-500/15 text-amber-100",
-  info: "border-sky-400/50 bg-sky-500/15 text-sky-100",
+  critical: "border-[#da1e28] bg-white text-[#161616]",
+  warning: "border-[#f1c21b] bg-white text-[#161616]",
+  info: "border-[#0f62fe] bg-white text-[#161616]",
+};
+
+const severityBarClass: Record<EventSeverity, string> = {
+  critical: "bg-[#da1e28]",
+  warning: "bg-[#f1c21b]",
+  info: "bg-[#0f62fe]",
 };
 
 const reviewLabel: Record<ReviewStatus, string> = {
-  needs_review: "검토 필요",
-  confirmed: "확인됨",
+  needs_review: "검토 대기",
+  confirmed: "확인",
   dismissed: "오탐",
 };
 
@@ -64,7 +70,7 @@ export function ControlRoomDashboard({
   const [events, setEvents] = useState(initialEvents);
   const [selectedFeedId, setSelectedFeedId] = useState(initialFeeds[0]?.id ?? "");
   const [statusFilter, setStatusFilter] = useState<FeedStatusFilter>("all");
-  const [apiStatus, setApiStatus] = useState("mock API 대기 중");
+  const [apiStatus, setApiStatus] = useState("mock 데이터 사용 중");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const visibleFeeds = useMemo(
@@ -90,7 +96,7 @@ export function ControlRoomDashboard({
 
   async function handleRefresh() {
     setIsRefreshing(true);
-    setApiStatus("mock API 갱신 중");
+    setApiStatus("데이터 갱신 중");
 
     try {
       const response = await fetch("/api/cctv", { cache: "no-store" });
@@ -106,7 +112,7 @@ export function ControlRoomDashboard({
       setFeeds(mergedSnapshot.feeds);
       setEvents(mergedSnapshot.events);
       setSelectedFeedId((currentFeedId) => getNextSelectedFeedId(nextVisibleFeeds, currentFeedId));
-      setApiStatus(`${snapshot.meta.source} API 갱신 완료 · ${snapshot.meta.generatedAt.slice(11, 19)}`);
+      setApiStatus(`${snapshot.meta.source} · ${snapshot.meta.generatedAt.slice(11, 19)} 갱신`);
     } catch (error) {
       setApiStatus(error instanceof Error ? `갱신 실패 · ${error.message}` : "갱신 실패");
     } finally {
@@ -115,12 +121,13 @@ export function ControlRoomDashboard({
   }
 
   return (
-    <main className="min-h-screen bg-[#071017] text-slate-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col gap-6 px-5 py-5 lg:px-8">
-        <Header apiStatus={apiStatus} isRefreshing={isRefreshing} onRefresh={handleRefresh} />
+    <main className="min-h-screen bg-[#f4f4f4] text-[#161616]">
+      <Header apiStatus={apiStatus} isRefreshing={isRefreshing} onRefresh={handleRefresh} />
+
+      <div className="mx-auto flex min-h-screen w-full max-w-[1584px] flex-col gap-4 px-4 py-4 md:px-8">
         <SummaryCards summary={summary} />
 
-        <section className="grid flex-1 gap-5 xl:grid-cols-[340px_minmax(0,1fr)_380px]">
+        <section className="grid flex-1 gap-4 xl:grid-cols-[336px_minmax(0,1fr)_392px]">
           <FeedList
             feeds={visibleFeeds}
             selectedFeedId={selectedFeed?.id ?? ""}
@@ -150,30 +157,26 @@ function Header({
   onRefresh: () => void;
 }) {
   return (
-    <header className="rounded-[2rem] border border-white/10 bg-white/[0.04] px-6 py-5 shadow-2xl shadow-black/20 backdrop-blur">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <header className="border-b border-[#393939] bg-[#161616] text-white">
+      <div className="mx-auto flex max-w-[1584px] flex-col gap-5 px-4 py-5 md:px-8 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="mb-2 text-sm font-medium text-cyan-300">Highway CCTV AI · MVP 관제 프로토타입</p>
-          <h1 className="text-3xl font-semibold tracking-[-0.04em] text-white md:text-5xl">
-            AI가 의심 이벤트를 정리하고, 운영자가 빠르게 확인합니다.
-          </h1>
-          <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-300">
-            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">{apiStatus}</span>
-            <button
-              className="rounded-full bg-cyan-300 px-4 py-2 font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
-              type="button"
-              disabled={isRefreshing}
-              onClick={onRefresh}
-            >
-              {isRefreshing ? "갱신 중" : "mock API 갱신"}
-            </button>
-          </div>
+          <p className="mb-2 font-mono text-xs text-[#c6c6c6]">Highway CCTV Control</p>
+          <h1 className="text-3xl font-normal tracking-[-0.03em] md:text-5xl">고속도로 CCTV 관제</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[#c6c6c6] md:text-base">
+            공개 CCTV 상태와 감지 후보를 한 화면에서 확인합니다. 자동 판정은 하지 않고, 운영자가 직접 확인합니다.
+          </p>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:w-[520px]">
-          <Badge label="저장" value="비활성" tone="safe" />
-          <Badge label="출처" value="표시" tone="safe" />
-          <Badge label="판정" value="후보" tone="warn" />
-          <Badge label="연결" value="mock" tone="info" />
+
+        <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center">
+          <span className="border border-[#525252] px-3 py-2 text-[#e0e0e0]">{apiStatus}</span>
+          <button
+            className="bg-[#0f62fe] px-4 py-3 font-medium text-white transition hover:bg-[#0043ce] disabled:cursor-not-allowed disabled:bg-[#6f6f6f]"
+            type="button"
+            disabled={isRefreshing}
+            onClick={onRefresh}
+          >
+            {isRefreshing ? "갱신 중" : "데이터 갱신"}
+          </button>
         </div>
       </div>
     </header>
@@ -182,19 +185,19 @@ function Header({
 
 function SummaryCards({ summary }: { summary: ReturnType<typeof getControlRoomSummary> }) {
   const cards = [
-    { label: "CCTV 피드", value: summary.totalFeeds, helper: `${summary.onlineFeeds} 정상 · ${summary.degradedFeeds} 지연` },
-    { label: "AI 이벤트 후보", value: summary.activeEvents, helper: `${summary.criticalEvents} 긴급 · ${summary.needsReview} 검토 필요` },
-    { label: "오프라인", value: summary.offlineFeeds, helper: "끊김/권한/URL 만료 확인" },
-    { label: "평균 대응 목표", value: "80초", helper: "확정 전 운영자 검토" },
+    { label: "CCTV", value: summary.totalFeeds, helper: `${summary.onlineFeeds} 정상, ${summary.degradedFeeds} 지연` },
+    { label: "감지 후보", value: summary.activeEvents, helper: `${summary.criticalEvents} 긴급, ${summary.needsReview} 검토 대기` },
+    { label: "끊김", value: summary.offlineFeeds, helper: "URL 만료 또는 접근 실패" },
+    { label: "운영 기준", value: "검토", helper: "사람 확인 전 확정하지 않음" },
   ];
 
   return (
-    <section className="grid gap-3 md:grid-cols-4">
+    <section className="grid gap-px border border-[#e0e0e0] bg-[#e0e0e0] md:grid-cols-4">
       {cards.map((card) => (
-        <article key={card.label} className="rounded-3xl border border-white/10 bg-slate-900/70 p-5">
-          <p className="text-sm text-slate-400">{card.label}</p>
-          <strong className="mt-2 block text-3xl font-semibold text-white">{card.value}</strong>
-          <p className="mt-2 text-sm text-slate-400">{card.helper}</p>
+        <article key={card.label} className="bg-white p-4 md:p-5">
+          <p className="font-mono text-xs text-[#525252]">{card.label}</p>
+          <strong className="mt-3 block text-3xl font-normal text-[#161616]">{card.value}</strong>
+          <p className="mt-2 text-sm text-[#525252]">{card.helper}</p>
         </article>
       ))}
     </section>
@@ -215,21 +218,15 @@ function FeedList({
   onFilterChange: (filter: FeedStatusFilter) => void;
 }) {
   return (
-    <aside className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-white">CCTV 목록</h2>
-          <p className="text-sm text-slate-400">소수 샘플로 연결 안정성부터 검증</p>
-        </div>
-        <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-300">{feeds.length}개</span>
-      </div>
+    <aside className="border border-[#e0e0e0] bg-white">
+      <PanelHeader title="CCTV" description="소수 지점으로 연결 상태를 확인합니다." count={`${feeds.length}개`} />
 
-      <div className="mb-4 grid grid-cols-4 gap-2 text-xs">
+      <div className="grid grid-cols-4 border-b border-[#e0e0e0] text-sm">
         {filterOptions.map((option) => (
           <button
             key={option.value}
-            className={`rounded-full px-3 py-2 transition ${
-              statusFilter === option.value ? "bg-cyan-300 text-slate-950" : "bg-white/10 text-slate-300"
+            className={`border-r border-[#e0e0e0] px-3 py-3 text-left last:border-r-0 ${
+              statusFilter === option.value ? "bg-[#edf5ff] text-[#0f62fe]" : "text-[#525252] hover:bg-[#f4f4f4]"
             }`}
             type="button"
             onClick={() => onFilterChange(option.value)}
@@ -239,30 +236,28 @@ function FeedList({
         ))}
       </div>
 
-      <div className="space-y-3">
+      <div>
         {feeds.map((feed) => (
           <button
             key={feed.id}
-            className={`w-full rounded-2xl border p-4 text-left transition ${
-              feed.id === selectedFeedId
-                ? "border-cyan-300/60 bg-cyan-300/10"
-                : "border-white/10 bg-white/[0.03] hover:border-white/25"
+            className={`block w-full border-b border-[#e0e0e0] p-4 text-left transition last:border-b-0 ${
+              feed.id === selectedFeedId ? "bg-[#edf5ff]" : "bg-white hover:bg-[#f4f4f4]"
             }`}
             type="button"
             onClick={() => onSelectFeed(feed.id)}
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="font-medium text-white">{feed.name}</h3>
-                <p className="mt-1 text-sm text-slate-400">
+                <h3 className="font-medium text-[#161616]">{feed.name}</h3>
+                <p className="mt-1 text-sm text-[#525252]">
                   {feed.route} · {feed.direction}
                 </p>
               </div>
               <StatusPill status={feed.status} />
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-slate-400">
-              <span>형식 {feed.streamType}</span>
-              <span>지연 {feed.latencySeconds}s</span>
+            <div className="mt-4 grid grid-cols-2 gap-y-1 font-mono text-xs text-[#6f6f6f]">
+              <span>{feed.streamType}</span>
+              <span>{feed.latencySeconds}s</span>
               <span>{feed.coordinates.lat.toFixed(3)}</span>
               <span>{feed.coordinates.lng.toFixed(3)}</span>
             </div>
@@ -277,33 +272,37 @@ function VideoWorkspace({ feed, events }: { feed: CctvFeed; events: DetectionEve
   const visibleEvents = events.length > 0 ? events : [];
 
   return (
-    <section className="flex min-h-[680px] flex-col rounded-[2rem] border border-white/10 bg-slate-950/80 p-4">
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <section className="flex min-h-[680px] flex-col border border-[#e0e0e0] bg-white">
+      <div className="flex flex-col gap-3 border-b border-[#e0e0e0] p-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">{feed.name} 라이브 검토</h2>
-          <p className="text-sm text-slate-400">
-            {feed.location} · {feed.source} · 마지막 확인 {feed.lastCheckedAt}
+          <p className="font-mono text-xs text-[#525252]">선택 지점</p>
+          <h2 className="mt-1 text-2xl font-normal text-[#161616]">{feed.name}</h2>
+          <p className="mt-2 text-sm text-[#525252]">
+            {feed.location} · {feed.source} · {feed.lastCheckedAt}
           </p>
         </div>
         <StatusPill status={feed.status} />
       </div>
 
-      <VideoPlayer feed={feed} />
+      <div className="flex flex-1 flex-col p-4">
+        <VideoPlayer feed={feed} />
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        {visibleEvents.length > 0 ? (
-          visibleEvents.slice(0, 3).map((event) => (
-            <article key={event.id} className={`rounded-2xl border p-4 ${severityClass[event.severity]}`}>
-              <p className="text-xs opacity-75">{event.detectedAt}</p>
-              <h3 className="mt-1 font-semibold">{event.label}</h3>
-              <p className="mt-2 text-sm opacity-80">신뢰도 {(event.confidence * 100).toFixed(0)}%</p>
+        <div className="mt-4 grid gap-px border border-[#e0e0e0] bg-[#e0e0e0] md:grid-cols-3">
+          {visibleEvents.length > 0 ? (
+            visibleEvents.slice(0, 3).map((event) => (
+              <article key={event.id} className="bg-white p-4">
+                <div className={`mb-3 h-1 w-8 ${severityBarClass[event.severity]}`} />
+                <p className="font-mono text-xs text-[#525252]">{event.detectedAt}</p>
+                <h3 className="mt-2 font-medium text-[#161616]">{event.label}</h3>
+                <p className="mt-2 text-sm text-[#525252]">신뢰도 {(event.confidence * 100).toFixed(0)}%</p>
+              </article>
+            ))
+          ) : (
+            <article className="bg-white p-4 text-sm text-[#525252] md:col-span-3">
+              이 지점에 연결된 감지 후보가 없습니다.
             </article>
-          ))
-        ) : (
-          <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400 md:col-span-3">
-            선택한 CCTV에 연결된 이벤트 후보가 아직 없습니다.
-          </article>
-        )}
+          )}
+        </div>
       </div>
     </section>
   );
@@ -319,32 +318,31 @@ function EventPanel({
   onReview: (eventId: string, reviewStatus: ReviewStatus) => void;
 }) {
   return (
-    <aside className="rounded-[2rem] border border-white/10 bg-slate-950/70 p-4">
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-white">AI 이벤트 후보</h2>
-        <p className="text-sm text-slate-400">확정 판정 전, 근거와 함께 운영자 검토</p>
-      </div>
+    <aside className="border border-[#e0e0e0] bg-white">
+      <PanelHeader title="감지 후보" description="확정 전 확인이 필요한 항목입니다." count={`${events.length}건`} />
 
-      <div className="space-y-3">
+      <div>
         {events.map((event) => {
           const feed = feeds.find((item) => item.id === event.feedId);
 
           return (
-            <article key={event.id} className={`rounded-2xl border p-4 ${severityClass[event.severity]}`}>
+            <article key={event.id} className={`border-b border-l-4 border-b-[#e0e0e0] p-4 last:border-b-0 ${severityClass[event.severity]}`}>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs opacity-70">{event.detectedAt}</p>
-                  <h3 className="mt-1 font-semibold">{event.label}</h3>
-                  <p className="mt-1 text-sm opacity-80">{feed?.name ?? "알 수 없음"}</p>
+                  <p className="font-mono text-xs text-[#525252]">{event.detectedAt}</p>
+                  <h3 className="mt-2 font-medium">{event.label}</h3>
+                  <p className="mt-1 text-sm text-[#525252]">{feed?.name ?? "알 수 없음"}</p>
                 </div>
-                <span className="rounded-full bg-black/20 px-2 py-1 text-xs">{reviewLabel[event.reviewStatus]}</span>
+                <span className="border border-[#c6c6c6] bg-[#f4f4f4] px-2 py-1 text-xs text-[#525252]">
+                  {reviewLabel[event.reviewStatus]}
+                </span>
               </div>
-              <ul className="mt-3 space-y-1 text-sm opacity-85">
+              <ul className="mt-3 space-y-1 text-sm text-[#525252]">
                 {event.evidence.map((item) => (
-                  <li key={item}>· {item}</li>
+                  <li key={item}>- {item}</li>
                 ))}
               </ul>
-              <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+              <div className="mt-4 grid grid-cols-3 gap-px bg-[#e0e0e0] text-sm">
                 <ReviewButton active={event.reviewStatus === "confirmed"} onClick={() => onReview(event.id, "confirmed")}>
                   확인
                 </ReviewButton>
@@ -352,7 +350,7 @@ function EventPanel({
                   오탐
                 </ReviewButton>
                 <ReviewButton active={event.reviewStatus === "needs_review"} onClick={() => onReview(event.id, "needs_review")}>
-                  보류
+                  대기
                 </ReviewButton>
               </div>
             </article>
@@ -374,9 +372,7 @@ function ReviewButton({
 }) {
   return (
     <button
-      className={`rounded-full px-3 py-2 transition ${
-        active ? "bg-white text-slate-950" : "bg-white/10 hover:bg-white/20"
-      }`}
+      className={`${active ? "bg-[#0f62fe] text-white" : "bg-white text-[#525252] hover:bg-[#f4f4f4]"} px-3 py-2`}
       type="button"
       onClick={onClick}
     >
@@ -387,27 +383,24 @@ function ReviewButton({
 
 function EmptyPanel() {
   return (
-    <section className="flex min-h-[680px] items-center justify-center rounded-[2rem] border border-white/10 bg-slate-950/80 p-4 text-slate-400">
+    <section className="flex min-h-[680px] items-center justify-center border border-[#e0e0e0] bg-white p-4 text-[#525252]">
       표시할 CCTV가 없습니다.
     </section>
   );
 }
 
-function StatusPill({ status }: { status: FeedStatus }) {
-  return <span className={`rounded-full border px-3 py-1 text-xs ${statusClass[status]}`}>{statusLabel[status]}</span>;
-}
-
-function Badge({ label, value, tone }: { label: string; value: string; tone: "safe" | "warn" | "info" }) {
-  const className = {
-    safe: "border-emerald-400/30 bg-emerald-400/10 text-emerald-100",
-    warn: "border-amber-400/30 bg-amber-400/10 text-amber-100",
-    info: "border-cyan-400/30 bg-cyan-400/10 text-cyan-100",
-  }[tone];
-
+function PanelHeader({ title, description, count }: { title: string; description: string; count: string }) {
   return (
-    <div className={`rounded-2xl border px-4 py-3 ${className}`}>
-      <p className="text-xs opacity-75">{label}</p>
-      <p className="mt-1 font-semibold">{value}</p>
+    <div className="flex items-start justify-between gap-3 border-b border-[#e0e0e0] p-4">
+      <div>
+        <h2 className="text-lg font-medium text-[#161616]">{title}</h2>
+        <p className="mt-1 text-sm text-[#525252]">{description}</p>
+      </div>
+      <span className="border border-[#c6c6c6] bg-[#f4f4f4] px-2 py-1 text-xs text-[#525252]">{count}</span>
     </div>
   );
+}
+
+function StatusPill({ status }: { status: FeedStatus }) {
+  return <span className={`border px-2 py-1 text-xs ${statusClass[status]}`}>{statusLabel[status]}</span>;
 }

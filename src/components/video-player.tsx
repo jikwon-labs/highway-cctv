@@ -8,7 +8,7 @@ import { getPlaybackStrategy } from "@/lib/playback";
 
 export function VideoPlayer({ feed }: { feed: CctvFeed }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [hlsState, setHlsState] = useState("HLS 대기 중");
+  const [hlsState, setHlsState] = useState("HLS 대기");
   const strategy = getPlaybackStrategy(feed.streamUrl, feed.streamType);
   const playerState = getPlayerState(strategy, hlsState);
 
@@ -30,7 +30,7 @@ export function VideoPlayer({ feed }: { feed: CctvFeed }) {
     }
 
     if (!Hls.isSupported()) {
-      queueMicrotask(() => setHlsState("이 브라우저는 HLS를 지원하지 않음"));
+      queueMicrotask(() => setHlsState("HLS 미지원"));
       return;
     }
 
@@ -43,10 +43,10 @@ export function VideoPlayer({ feed }: { feed: CctvFeed }) {
     hls.loadSource(feed.streamUrl);
     hls.attachMedia(video);
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      setHlsState("HLS 매니페스트 로드 완료");
+      setHlsState("HLS 준비됨");
     });
     hls.on(Hls.Events.ERROR, (_, data) => {
-      setHlsState(data.fatal ? "HLS 치명 오류" : "HLS 복구 가능 오류");
+      setHlsState(data.fatal ? "HLS 오류" : "HLS 복구 중");
     });
 
     return () => {
@@ -55,9 +55,9 @@ export function VideoPlayer({ feed }: { feed: CctvFeed }) {
   }, [feed.streamUrl, strategy]);
 
   return (
-    <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-[1.5rem] border border-cyan-300/20 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.22),transparent_35%),linear-gradient(135deg,#101827,#05080d)]">
-      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between border-b border-white/10 bg-black/30 px-5 py-3 text-xs text-slate-300 backdrop-blur">
-        <span>{strategy === "hls" ? "HLS PLAYER READY" : "VIDEO REVIEW PREVIEW"}</span>
+    <div className="relative flex min-h-[420px] flex-1 items-center justify-center overflow-hidden border border-[#c6c6c6] bg-[#161616]">
+      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between border-b border-[#393939] bg-[#262626] px-4 py-2 font-mono text-xs text-[#c6c6c6]">
+        <span>{strategy === "hls" ? "HLS" : "Preview"}</span>
         <span>{playerState}</span>
       </div>
 
@@ -74,18 +74,18 @@ export function VideoPlayer({ feed }: { feed: CctvFeed }) {
         />
       )}
 
-      <AiOverlay />
+      <SceneGuides />
     </div>
   );
 }
 
 function getPlayerState(strategy: ReturnType<typeof getPlaybackStrategy>, hlsState: string) {
   if (strategy === "placeholder") {
-    return "실제 스트림 연결 전";
+    return "영상 연결 대기";
   }
 
   if (strategy === "native-video") {
-    return "네이티브 비디오 준비";
+    return "비디오 준비";
   }
 
   return hlsState;
@@ -93,22 +93,22 @@ function getPlayerState(strategy: ReturnType<typeof getPlaybackStrategy>, hlsSta
 
 function PlaceholderOverlay() {
   return (
-    <div className="z-10 max-w-md rounded-3xl border border-white/10 bg-black/45 p-6 text-center backdrop-blur">
-      <p className="text-sm font-medium text-cyan-200">실제 CCTV 연결 전</p>
-      <h3 className="mt-2 text-3xl font-semibold tracking-tight text-white">HLS 플레이어 준비 완료</h3>
-      <p className="mt-3 text-sm leading-6 text-slate-300">
-        API 키/약관/트래픽/저장 가능 여부 확인 후 streamUrl만 연결하면 HLS.js 또는 브라우저 네이티브 HLS로 재생합니다.
+    <div className="z-10 mx-6 max-w-md border border-[#525252] bg-[#262626] p-5 text-left">
+      <p className="font-mono text-xs text-[#c6c6c6]">No stream connected</p>
+      <h3 className="mt-3 text-2xl font-normal text-white">영상 연결 대기</h3>
+      <p className="mt-3 text-sm leading-6 text-[#c6c6c6]">
+        ITS 키와 이용 조건이 확인되면 streamUrl을 연결합니다. 그 전에는 영상 저장이나 대량 호출을 하지 않습니다.
       </p>
     </div>
   );
 }
 
-function AiOverlay() {
+function SceneGuides() {
   return (
     <>
-      <div className="pointer-events-none absolute left-[18%] top-[34%] h-24 w-36 rounded-xl border-2 border-rose-400 bg-rose-500/10 shadow-[0_0_40px_rgba(244,63,94,0.35)]" />
-      <div className="pointer-events-none absolute right-[20%] top-[48%] h-20 w-32 rounded-xl border-2 border-cyan-300 bg-cyan-400/10" />
-      <div className="pointer-events-none absolute bottom-[25%] left-[42%] h-16 w-28 rounded-xl border-2 border-amber-300 bg-amber-400/10" />
+      <div className="pointer-events-none absolute left-[18%] top-[34%] h-24 w-36 border-2 border-[#da1e28] bg-[#da1e28]/10" />
+      <div className="pointer-events-none absolute right-[20%] top-[48%] h-20 w-32 border-2 border-[#0f62fe] bg-[#0f62fe]/10" />
+      <div className="pointer-events-none absolute bottom-[25%] left-[42%] h-16 w-28 border-2 border-[#f1c21b] bg-[#f1c21b]/10" />
     </>
   );
 }
