@@ -22,6 +22,7 @@ import {
   updateEventReviewStatus,
   type FeedStatusFilter,
 } from "@/lib/dashboard";
+import { buildEventTimeline, getNextSelectedEventId, type EventTimelineItem } from "@/lib/event-workflow";
 import {
   applyReviewHistoryToEvents,
   createReviewHistoryEntry,
@@ -114,6 +115,7 @@ export function ControlRoomDashboard({
   const [reviewHistory, setReviewHistory] = useState<ReviewHistoryEntry[]>(() => readStoredReviewHistory());
   const [events, setEvents] = useState(() => applyReviewHistoryToEvents(initialEvents, reviewHistory));
   const [selectedFeedId, setSelectedFeedId] = useState(initialFeeds[0]?.id ?? "");
+  const [selectedEventId, setSelectedEventId] = useState(() => getNextSelectedEventId(initialEvents));
   const [statusFilter, setStatusFilter] = useState<FeedStatusFilter>("all");
   const [apiStatus, setApiStatus] = useState("mock 데이터 사용 중");
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -127,6 +129,8 @@ export function ControlRoomDashboard({
     feeds.find((feed) => feed.id === selectedFeedId) ?? visibleFeeds[0] ?? feeds[0];
   const selectedFeedEvents = selectedFeed ? getEventsForFeed(events, selectedFeed.id) : [];
   const priorityEvents = getTopPriorityEvents(events, 4);
+  const selectedEvent = events.find((event) => event.id === selectedEventId) ?? priorityEvents[0];
+  const selectedEventTimeline = selectedEvent ? buildEventTimeline(selectedEvent, reviewHistory) : [];
   const summary = getControlRoomSummary(feeds, events);
   const sourceStatusCards = useMemo(() => buildSourceStatusCards(feeds, sourceProfiles), [feeds]);
   const sourceSummary = useMemo(
@@ -185,6 +189,7 @@ export function ControlRoomDashboard({
       setFeeds(mergedSnapshot.feeds);
       setEvents(mergedSnapshot.events);
       setSelectedFeedId((currentFeedId) => getNextSelectedFeedId(nextVisibleFeeds, currentFeedId));
+      setSelectedEventId((currentEventId) => getNextSelectedEventId(mergedSnapshot.events, currentEventId));
       setApiStatus(`${getCctvSourceLabel(snapshot.meta.source)} · ${snapshot.meta.generatedAt.slice(11, 19)} 갱신`);
     } catch (error) {
       setApiStatus(error instanceof Error ? `갱신 실패 · ${error.message}` : "갱신 실패");
@@ -213,6 +218,8 @@ export function ControlRoomDashboard({
               feed={selectedFeed}
               feeds={visibleFeeds.length > 0 ? visibleFeeds : feeds}
               events={selectedFeedEvents}
+              selectedEvent={selectedEvent}
+              eventTimeline={selectedEventTimeline}
               onSelectFeed={setSelectedFeedId}
             />
           ) : (
@@ -222,6 +229,8 @@ export function ControlRoomDashboard({
             sourceStatusCards={sourceStatusCards}
             sourceSummary={sourceSummary}
             events={priorityEvents}
+            selectedEventId={selectedEvent?.id ?? ""}
+            onSelectEvent={setSelectedEventId}
             feeds={feeds}
             reviewHistory={reviewHistory}
             reviewReasonByEventId={reviewReasonByEventId}
@@ -364,11 +373,15 @@ function VideoWorkspace({
   feed,
   feeds,
   events,
+  selectedEvent,
+  eventTimeline,
   onSelectFeed,
 }: {
   feed: CctvFeed;
   feeds: CctvFeed[];
   events: DetectionEvent[];
+  selectedEvent?: DetectionEvent;
+  eventTimeline: EventTimelineItem[];
   onSelectFeed: (feedId: string) => void;
 }) {
   const visibleEvents = events.length > 0 ? events : [];
@@ -389,6 +402,7 @@ function VideoWorkspace({
       <div className="flex flex-1 flex-col gap-4 p-4">
         <CctvMap feeds={feeds} selectedFeed={feed} onSelectFeed={onSelectFeed} />
         <VideoPlayer feed={feed} />
+        <EventDetailPanel event={selectedEvent} timeline={eventTimeline} />
 
         <div className="grid gap-px border border-[#e0e0e0] bg-[#e0e0e0] md:grid-cols-3">
           {visibleEvents.length > 0 ? (
@@ -408,6 +422,69 @@ function VideoWorkspace({
         </div>
       </div>
     </section>
+  );
+}
+
+function EventDetailPanel({
+  event,
+  timeline,
+}: {
+  event?: DetectionEvent;
+  timeline: EventTimelineItem[];
+}) {
+  if (!event) {
+    return (
+      <section className="border border-[#e0e0e0] bg-white p-4 text-sm text-[#525252]">
+        선택된 감지 후보가 없습니다.
+      </section>
+    );
+  }
+
+  return (
+    <section className="border border-[#e0e0e0] bg-white">
+      <div className="grid gap-px border-b border-[#e0e0e0] bg-[#e0e0e0] md:grid-cols-[1fr_180px_120px]">
+        <div className="bg-white p-4">
+          <p className="font-mono text-xs text-[#525252]">이벤트 상세</p>
+          <h3 className="mt-1 text-xl font-normal text-[#161616]">{event.label}</h3>
+          <p className="mt-2 text-sm text-[#525252]">{event.type} · {event.detectedAt}</p>
+        </div>
+        <DetailMetric label="신뢰도" value={`${(event.confidence * 100).toFixed(0)}%`} />
+        <DetailMetric label="상태" value={reviewLabel[event.reviewStatus]} />
+      </div>
+
+      <div className="grid gap-px bg-[#e0e0e0] md:grid-cols-[1fr_1fr]">
+        <div className="bg-white p-4">
+          <h4 className="text-sm font-medium text-[#161616]">근거</h4>
+          <ul className="mt-3 space-y-2 text-sm text-[#525252]">
+            {event.evidence.map((item) => (
+              <li key={item}>- {item}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="bg-white p-4">
+          <h4 className="text-sm font-medium text-[#161616]">타임라인</h4>
+          <ol className="mt-3 space-y-3">
+            {timeline.map((item) => (
+              <li key={item.id} className="border-l-2 border-[#0f62fe] pl-3">
+                <p className="font-mono text-xs text-[#6f6f6f]">{item.timeLabel}</p>
+                <p className="mt-1 text-sm font-medium text-[#161616]">{item.title}</p>
+                <p className="mt-1 text-sm text-[#525252]">{item.description}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DetailMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-white p-4">
+      <p className="font-mono text-xs text-[#525252]">{label}</p>
+      <p className="mt-2 text-lg text-[#161616]">{value}</p>
+    </div>
   );
 }
 
@@ -512,6 +589,8 @@ function RightRail({
   sourceStatusCards,
   sourceSummary,
   events,
+  selectedEventId,
+  onSelectEvent,
   feeds,
   reviewHistory,
   reviewReasonByEventId,
@@ -521,6 +600,8 @@ function RightRail({
   sourceStatusCards: SourceStatusCard[];
   sourceSummary: ReturnType<typeof getSourceReadinessSummary>;
   events: DetectionEvent[];
+  selectedEventId: string;
+  onSelectEvent: (eventId: string) => void;
   feeds: CctvFeed[];
   reviewHistory: ReviewHistoryEntry[];
   reviewReasonByEventId: Record<string, string>;
@@ -532,6 +613,8 @@ function RightRail({
       <SourceStatusPanel cards={sourceStatusCards} summary={sourceSummary} />
       <EventPanel
         events={events}
+        selectedEventId={selectedEventId}
+        onSelectEvent={onSelectEvent}
         feeds={feeds}
         reviewReasonByEventId={reviewReasonByEventId}
         onReasonChange={onReasonChange}
@@ -664,12 +747,16 @@ function formatHistoryTime(value: string): string {
 
 function EventPanel({
   events,
+  selectedEventId,
+  onSelectEvent,
   feeds,
   reviewReasonByEventId,
   onReasonChange,
   onReview,
 }: {
   events: DetectionEvent[];
+  selectedEventId: string;
+  onSelectEvent: (eventId: string) => void;
   feeds: CctvFeed[];
   reviewReasonByEventId: Record<string, string>;
   onReasonChange: (eventId: string, reason: string) => void;
@@ -683,18 +770,33 @@ function EventPanel({
         {events.map((event) => {
           const feed = feeds.find((item) => item.id === event.feedId);
           const selectedReason = reviewReasonByEventId[event.id] ?? getDefaultReviewReason("confirmed");
+          const selected = event.id === selectedEventId;
 
           return (
-            <article key={event.id} className={`border-b border-l-4 border-b-[#e0e0e0] p-4 last:border-b-0 ${severityClass[event.severity]}`}>
+            <article
+              key={event.id}
+              className={`border-b border-l-4 border-b-[#e0e0e0] p-4 last:border-b-0 ${severityClass[event.severity]} ${
+                selected ? "ring-2 ring-inset ring-[#0f62fe]" : ""
+              }`}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-mono text-xs text-[#525252]">{event.detectedAt}</p>
                   <h3 className="mt-2 font-medium">{event.label}</h3>
                   <p className="mt-1 text-sm text-[#525252]">{feed?.name ?? "알 수 없음"}</p>
                 </div>
-                <span className="border border-[#c6c6c6] bg-[#f4f4f4] px-2 py-1 text-xs text-[#525252]">
-                  {reviewLabel[event.reviewStatus]}
-                </span>
+                <div className="flex flex-col items-end gap-2">
+                  <span className="border border-[#c6c6c6] bg-[#f4f4f4] px-2 py-1 text-xs text-[#525252]">
+                    {reviewLabel[event.reviewStatus]}
+                  </span>
+                  <button
+                    className="text-xs text-[#0f62fe] underline-offset-2 hover:underline"
+                    type="button"
+                    onClick={() => onSelectEvent(event.id)}
+                  >
+                    상세 보기
+                  </button>
+                </div>
               </div>
               <ul className="mt-3 space-y-1 text-sm text-[#525252]">
                 {event.evidence.map((item) => (
