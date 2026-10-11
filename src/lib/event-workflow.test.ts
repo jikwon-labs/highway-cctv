@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { cctvFeeds, detectionEvents } from "./cctv";
-import { buildEventTimeline, getNextSelectedEventId } from "./event-workflow";
+import { buildEventQueueSummary, buildEventTimeline, filterEventQueue, getNextSelectedEventId } from "./event-workflow";
 import { createReviewHistoryEntry } from "./review-history";
 
 describe("이벤트 상세/타임라인 도메인", () => {
@@ -55,5 +55,28 @@ describe("이벤트 상세/타임라인 도메인", () => {
         description: "운영자 · 중복 후보",
       },
     ]);
+  });
+
+  it("운영 큐 필터로 검토 대기/긴급/전체 이벤트를 나눈다", () => {
+    expect(filterEventQueue(detectionEvents, "all")).toHaveLength(4);
+    expect(filterEventQueue(detectionEvents, "needs_review").map((event) => event.id)).toEqual([
+      "evt-stopped-vehicle-01",
+      "evt-wrong-way-01",
+      "evt-congestion-01",
+    ]);
+    expect(filterEventQueue(detectionEvents, "critical").map((event) => event.id)).toEqual([
+      "evt-stopped-vehicle-01",
+      "evt-wrong-way-01",
+    ]);
+  });
+
+  it("운영 큐 탭에 표시할 건수를 만든다", () => {
+    expect(buildEventQueueSummary(detectionEvents)).toEqual({
+      all: 4,
+      needs_review: 3,
+      critical: 2,
+      confirmed: 1,
+      dismissed: 0,
+    });
   });
 });

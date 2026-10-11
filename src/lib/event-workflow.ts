@@ -1,6 +1,10 @@
 import { getTopPriorityEvents, type DetectionEvent, type ReviewStatus } from "./cctv";
 import type { ReviewHistoryEntry } from "./review-history";
 
+export type EventQueueFilter = "all" | "needs_review" | "critical" | "confirmed" | "dismissed";
+
+export type EventQueueSummary = Record<EventQueueFilter, number>;
+
 export type EventTimelineItem = {
   id: string;
   timeLabel: string;
@@ -48,6 +52,31 @@ export function buildEventTimeline(
     },
     ...reviewSteps,
   ];
+}
+
+export function filterEventQueue(
+  events: DetectionEvent[],
+  filter: EventQueueFilter,
+): DetectionEvent[] {
+  if (filter === "all") {
+    return events;
+  }
+
+  if (filter === "critical") {
+    return events.filter((event) => event.severity === "critical");
+  }
+
+  return events.filter((event) => event.reviewStatus === filter);
+}
+
+export function buildEventQueueSummary(events: DetectionEvent[]): EventQueueSummary {
+  return {
+    all: events.length,
+    needs_review: events.filter((event) => event.reviewStatus === "needs_review").length,
+    critical: events.filter((event) => event.severity === "critical").length,
+    confirmed: events.filter((event) => event.reviewStatus === "confirmed").length,
+    dismissed: events.filter((event) => event.reviewStatus === "dismissed").length,
+  };
 }
 
 function formatHistoryTime(value: string): string {

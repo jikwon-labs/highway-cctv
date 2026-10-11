@@ -22,7 +22,14 @@ import {
   updateEventReviewStatus,
   type FeedStatusFilter,
 } from "@/lib/dashboard";
-import { buildEventTimeline, getNextSelectedEventId, type EventTimelineItem } from "@/lib/event-workflow";
+import {
+  buildEventQueueSummary,
+  buildEventTimeline,
+  filterEventQueue,
+  getNextSelectedEventId,
+  type EventQueueFilter,
+  type EventTimelineItem,
+} from "@/lib/event-workflow";
 import {
   applyReviewHistoryToEvents,
   createReviewHistoryEntry,
@@ -96,6 +103,14 @@ const filterOptions: Array<{ label: string; value: FeedStatusFilter }> = [
   { label: "끊김", value: "offline" },
 ];
 
+const eventQueueFilterOptions: Array<{ label: string; value: EventQueueFilter }> = [
+  { label: "전체", value: "all" },
+  { label: "검토", value: "needs_review" },
+  { label: "긴급", value: "critical" },
+  { label: "확인", value: "confirmed" },
+  { label: "오탐", value: "dismissed" },
+];
+
 function readStoredReviewHistory(): ReviewHistoryEntry[] {
   if (typeof window === "undefined") {
     return [];
@@ -117,6 +132,7 @@ export function ControlRoomDashboard({
   const [selectedFeedId, setSelectedFeedId] = useState(initialFeeds[0]?.id ?? "");
   const [selectedEventId, setSelectedEventId] = useState(() => getNextSelectedEventId(initialEvents));
   const [statusFilter, setStatusFilter] = useState<FeedStatusFilter>("all");
+  const [eventQueueFilter, setEventQueueFilter] = useState<EventQueueFilter>("needs_review");
   const [apiStatus, setApiStatus] = useState("mock 데이터 사용 중");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [reviewReasonByEventId, setReviewReasonByEventId] = useState<Record<string, string>>({});
@@ -128,8 +144,13 @@ export function ControlRoomDashboard({
   const selectedFeed =
     feeds.find((feed) => feed.id === selectedFeedId) ?? visibleFeeds[0] ?? feeds[0];
   const selectedFeedEvents = selectedFeed ? getEventsForFeed(events, selectedFeed.id) : [];
-  const priorityEvents = getTopPriorityEvents(events, 4);
-  const selectedEvent = events.find((event) => event.id === selectedEventId) ?? priorityEvents[0];
+  const eventQueueSummary = useMemo(() => buildEventQueueSummary(events), [events]);
+  const visibleQueueEvents = useMemo(
+    () => filterEventQueue(events, eventQueueFilter),
+    [events, eventQueueFilter],
+  );
+  const priorityEvents = getTopPriorityEvents(visibleQueueEvents, 4);
+  const selectedEvent = priorityEvents.find((event) => event.id === selectedEventId) ?? priorityEvents[0];
   const selectedEventTimeline = selectedEvent ? buildEventTimeline(selectedEvent, reviewHistory) : [];
   const summary = getControlRoomSummary(feeds, events);
   const sourceStatusCards = useMemo(() => buildSourceStatusCards(feeds, sourceProfiles), [feeds]);
@@ -143,6 +164,13 @@ export function ControlRoomDashboard({
 
     setStatusFilter(nextFilter);
     setSelectedFeedId((currentFeedId) => getNextSelectedFeedId(nextVisibleFeeds, currentFeedId));
+  }
+
+  function handleEventQueueFilterChange(nextFilter: EventQueueFilter) {
+    const nextEvents = filterEventQueue(events, nextFilter);
+
+    setEventQueueFilter(nextFilter);
+    setSelectedEventId((currentEventId) => getNextSelectedEventId(nextEvents, currentEventId));
   }
 
   function handleReview(eventId: string, reviewStatus: ReviewStatus) {
@@ -229,6 +257,9 @@ export function ControlRoomDashboard({
             sourceStatusCards={sourceStatusCards}
             sourceSummary={sourceSummary}
             events={priorityEvents}
+            eventQueueFilter={eventQueueFilter}
+            eventQueueSummary={eventQueueSummary}
+            onEventQueueFilterChange={handleEventQueueFilterChange}
             selectedEventId={selectedEvent?.id ?? ""}
             onSelectEvent={setSelectedEventId}
             feeds={feeds}
@@ -589,6 +620,9 @@ function RightRail({
   sourceStatusCards,
   sourceSummary,
   events,
+  eventQueueFilter,
+  eventQueueSummary,
+  onEventQueueFilterChange,
   selectedEventId,
   onSelectEvent,
   feeds,
@@ -600,6 +634,9 @@ function RightRail({
   sourceStatusCards: SourceStatusCard[];
   sourceSummary: ReturnType<typeof getSourceReadinessSummary>;
   events: DetectionEvent[];
+  eventQueueFilter: EventQueueFilter;
+  eventQueueSummary: Record<EventQueueFilter, number>;
+  onEventQueueFilterChange: (filter: EventQueueFilter) => void;
   selectedEventId: string;
   onSelectEvent: (eventId: string) => void;
   feeds: CctvFeed[];
@@ -613,6 +650,9 @@ function RightRail({
       <SourceStatusPanel cards={sourceStatusCards} summary={sourceSummary} />
       <EventPanel
         events={events}
+        eventQueueFilter={eventQueueFilter}
+        eventQueueSummary={eventQueueSummary}
+        onEventQueueFilterChange={onEventQueueFilterChange}
         selectedEventId={selectedEventId}
         onSelectEvent={onSelectEvent}
         feeds={feeds}
@@ -747,6 +787,9 @@ function formatHistoryTime(value: string): string {
 
 function EventPanel({
   events,
+  eventQueueFilter,
+  eventQueueSummary,
+  onEventQueueFilterChange,
   selectedEventId,
   onSelectEvent,
   feeds,
@@ -755,6 +798,9 @@ function EventPanel({
   onReview,
 }: {
   events: DetectionEvent[];
+  eventQueueFilter: EventQueueFilter;
+  eventQueueSummary: Record<EventQueueFilter, number>;
+  onEventQueueFilterChange: (filter: EventQueueFilter) => void;
   selectedEventId: string;
   onSelectEvent: (eventId: string) => void;
   feeds: CctvFeed[];
@@ -766,7 +812,26 @@ function EventPanel({
     <aside className="border border-[#e0e0e0] bg-white">
       <PanelHeader title="감지 후보" description="확정 전 확인이 필요한 항목입니다." count={`${events.length}건`} />
 
+      <div className="grid grid-cols-5 border-b border-[#e0e0e0] text-xs">
+        {eventQueueFilterOptions.map((option) => (
+          <button
+            key={option.value}
+            className={`border-r border-[#e0e0e0] px-2 py-3 text-left last:border-r-0 ${
+              eventQueueFilter === option.value ? "bg-[#edf5ff] text-[#0f62fe]" : "text-[#525252] hover:bg-[#f4f4f4]"
+            }`}
+            type="button"
+            onClick={() => onEventQueueFilterChange(option.value)}
+          >
+            <span className="block">{option.label}</span>
+            <span className="mt-1 block font-mono">{eventQueueSummary[option.value]}</span>
+          </button>
+        ))}
+      </div>
+
       <div>
+        {events.length === 0 ? (
+          <div className="p-4 text-sm text-[#525252]">현재 필터에 해당하는 감지 후보가 없습니다.</div>
+        ) : null}
         {events.map((event) => {
           const feed = feeds.find((item) => item.id === event.feedId);
           const selectedReason = reviewReasonByEventId[event.id] ?? getDefaultReviewReason("confirmed");
