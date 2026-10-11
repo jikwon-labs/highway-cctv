@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 
 import { VideoPlayer } from "@/components/video-player";
+import type { CctvSnapshot } from "@/lib/cctv-api";
+import { mergeCctvSnapshot } from "@/lib/cctv-api";
 import {
   getControlRoomSummary,
   getTopPriorityEvents,
@@ -58,10 +60,12 @@ export function ControlRoomDashboard({
   initialFeeds: CctvFeed[];
   initialEvents: DetectionEvent[];
 }) {
-  const [feeds] = useState(initialFeeds);
+  const [feeds, setFeeds] = useState(initialFeeds);
   const [events, setEvents] = useState(initialEvents);
   const [selectedFeedId, setSelectedFeedId] = useState(initialFeeds[0]?.id ?? "");
   const [statusFilter, setStatusFilter] = useState<FeedStatusFilter>("all");
+  const [apiStatus, setApiStatus] = useState("mock API 대기 중");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const visibleFeeds = useMemo(
     () => filterFeedsByStatus(feeds, statusFilter),
@@ -84,10 +88,36 @@ export function ControlRoomDashboard({
     setEvents((currentEvents) => updateEventReviewStatus(currentEvents, eventId, reviewStatus));
   }
 
+  async function handleRefresh() {
+    setIsRefreshing(true);
+    setApiStatus("mock API 갱신 중");
+
+    try {
+      const response = await fetch("/api/cctv", { cache: "no-store" });
+
+      if (!response.ok) {
+        throw new Error(`API ${response.status}`);
+      }
+
+      const snapshot = (await response.json()) as CctvSnapshot;
+      const mergedSnapshot = mergeCctvSnapshot(snapshot, events);
+      const nextVisibleFeeds = filterFeedsByStatus(mergedSnapshot.feeds, statusFilter);
+
+      setFeeds(mergedSnapshot.feeds);
+      setEvents(mergedSnapshot.events);
+      setSelectedFeedId((currentFeedId) => getNextSelectedFeedId(nextVisibleFeeds, currentFeedId));
+      setApiStatus(`${snapshot.meta.source} API 갱신 완료 · ${snapshot.meta.generatedAt.slice(11, 19)}`);
+    } catch (error) {
+      setApiStatus(error instanceof Error ? `갱신 실패 · ${error.message}` : "갱신 실패");
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#071017] text-slate-100">
       <div className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col gap-6 px-5 py-5 lg:px-8">
-        <Header />
+        <Header apiStatus={apiStatus} isRefreshing={isRefreshing} onRefresh={handleRefresh} />
         <SummaryCards summary={summary} />
 
         <section className="grid flex-1 gap-5 xl:grid-cols-[340px_minmax(0,1fr)_380px]">
@@ -110,7 +140,15 @@ export function ControlRoomDashboard({
   );
 }
 
-function Header() {
+function Header({
+  apiStatus,
+  isRefreshing,
+  onRefresh,
+}: {
+  apiStatus: string;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
   return (
     <header className="rounded-[2rem] border border-white/10 bg-white/[0.04] px-6 py-5 shadow-2xl shadow-black/20 backdrop-blur">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -119,12 +157,23 @@ function Header() {
           <h1 className="text-3xl font-semibold tracking-[-0.04em] text-white md:text-5xl">
             AI가 의심 이벤트를 정리하고, 운영자가 빠르게 확인합니다.
           </h1>
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-300">
+            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">{apiStatus}</span>
+            <button
+              className="rounded-full bg-cyan-300 px-4 py-2 font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              disabled={isRefreshing}
+              onClick={onRefresh}
+            >
+              {isRefreshing ? "갱신 중" : "mock API 갱신"}
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:w-[520px]">
           <Badge label="저장" value="비활성" tone="safe" />
           <Badge label="출처" value="표시" tone="safe" />
           <Badge label="판정" value="후보" tone="warn" />
-          <Badge label="연결" value="샘플" tone="info" />
+          <Badge label="연결" value="mock" tone="info" />
         </div>
       </div>
     </header>
