@@ -22,6 +22,21 @@ import {
   updateEventReviewStatus,
   type FeedStatusFilter,
 } from "@/lib/dashboard";
+import {
+  applyReviewHistoryToEvents,
+  createReviewHistoryEntry,
+  parseReviewHistory,
+  reviewHistoryStorageKey,
+  serializeReviewHistory,
+  type ReviewHistoryEntry,
+} from "@/lib/review-history";
+import {
+  buildSourceStatusCards,
+  getSourceReadinessSummary,
+  sourceProfiles,
+  type SourceReadinessStatus,
+  type SourceStatusCard,
+} from "@/lib/source-status";
 
 const statusLabel: Record<FeedStatus, string> = {
   online: "정상",
@@ -39,6 +54,18 @@ const statusDotClass: Record<FeedStatus, string> = {
   online: "bg-[#24a148]",
   degraded: "bg-[#f1c21b]",
   offline: "bg-[#da1e28]",
+};
+
+const sourceStatusLabel: Record<SourceReadinessStatus, string> = {
+  ready: "사용 가능",
+  needs_review: "확인 필요",
+  blocked: "보류",
+};
+
+const sourceStatusClass: Record<SourceReadinessStatus, string> = {
+  ready: "border-[#24a148] bg-[#defbe6] text-[#0e6027]",
+  needs_review: "border-[#f1c21b] bg-[#fcf4d6] text-[#684e00]",
+  blocked: "border-[#da1e28] bg-[#fff1f1] text-[#a2191f]",
 };
 
 const severityClass: Record<EventSeverity, string> = {
@@ -66,6 +93,14 @@ const filterOptions: Array<{ label: string; value: FeedStatusFilter }> = [
   { label: "끊김", value: "offline" },
 ];
 
+function readStoredReviewHistory(): ReviewHistoryEntry[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  return parseReviewHistory(window.localStorage.getItem(reviewHistoryStorageKey));
+}
+
 export function ControlRoomDashboard({
   initialFeeds,
   initialEvents,
@@ -74,7 +109,8 @@ export function ControlRoomDashboard({
   initialEvents: DetectionEvent[];
 }) {
   const [feeds, setFeeds] = useState(initialFeeds);
-  const [events, setEvents] = useState(initialEvents);
+  const [reviewHistory, setReviewHistory] = useState<ReviewHistoryEntry[]>(() => readStoredReviewHistory());
+  const [events, setEvents] = useState(() => applyReviewHistoryToEvents(initialEvents, reviewHistory));
   const [selectedFeedId, setSelectedFeedId] = useState(initialFeeds[0]?.id ?? "");
   const [statusFilter, setStatusFilter] = useState<FeedStatusFilter>("all");
   const [apiStatus, setApiStatus] = useState("mock 데이터 사용 중");
@@ -89,6 +125,11 @@ export function ControlRoomDashboard({
   const selectedFeedEvents = selectedFeed ? getEventsForFeed(events, selectedFeed.id) : [];
   const priorityEvents = getTopPriorityEvents(events, 4);
   const summary = getControlRoomSummary(feeds, events);
+  const sourceStatusCards = useMemo(() => buildSourceStatusCards(feeds, sourceProfiles), [feeds]);
+  const sourceSummary = useMemo(
+    () => getSourceReadinessSummary(sourceStatusCards),
+    [sourceStatusCards],
+  );
 
   function handleFilterChange(nextFilter: FeedStatusFilter) {
     const nextVisibleFeeds = filterFeedsByStatus(feeds, nextFilter);
@@ -98,6 +139,27 @@ export function ControlRoomDashboard({
   }
 
   function handleReview(eventId: string, reviewStatus: ReviewStatus) {
+    const event = events.find((item) => item.id === eventId);
+    const feed = event ? feeds.find((item) => item.id === event.feedId) : undefined;
+
+    if (!event || !feed || event.reviewStatus === reviewStatus) {
+      return;
+    }
+
+    const nextHistory = [
+      createReviewHistoryEntry({
+        event,
+        feed,
+        previousStatus: event.reviewStatus,
+        nextStatus: reviewStatus,
+        operator: "운영자",
+        createdAt: new Date().toISOString(),
+      }),
+      ...reviewHistory,
+    ].slice(0, 50);
+
+    setReviewHistory(nextHistory);
+    window.localStorage.setItem(reviewHistoryStorageKey, serializeReviewHistory(nextHistory));
     setEvents((currentEvents) => updateEventReviewStatus(currentEvents, eventId, reviewStatus));
   }
 
@@ -152,7 +214,14 @@ export function ControlRoomDashboard({
           ) : (
             <EmptyPanel />
           )}
-          <EventPanel events={priorityEvents} feeds={feeds} onReview={handleReview} />
+          <RightRail
+            sourceStatusCards={sourceStatusCards}
+            sourceSummary={sourceSummary}
+            events={priorityEvents}
+            feeds={feeds}
+            reviewHistory={reviewHistory}
+            onReview={handleReview}
+          />
         </section>
       </div>
     </main>
@@ -426,6 +495,149 @@ function MapInfo({ label, value }: { label: string; value: string }) {
       <p className="mt-1 truncate text-sm text-[#161616]">{value}</p>
     </div>
   );
+}
+
+function RightRail({
+  sourceStatusCards,
+  sourceSummary,
+  events,
+  feeds,
+  reviewHistory,
+  onReview,
+}: {
+  sourceStatusCards: SourceStatusCard[];
+  sourceSummary: ReturnType<typeof getSourceReadinessSummary>;
+  events: DetectionEvent[];
+  feeds: CctvFeed[];
+  reviewHistory: ReviewHistoryEntry[];
+  onReview: (eventId: string, reviewStatus: ReviewStatus) => void;
+}) {
+  return (
+    <aside className="flex flex-col gap-4">
+      <SourceStatusPanel cards={sourceStatusCards} summary={sourceSummary} />
+      <EventPanel events={events} feeds={feeds} onReview={onReview} />
+      <ReviewHistoryPanel history={reviewHistory} />
+    </aside>
+  );
+}
+
+function SourceStatusPanel({
+  cards,
+  summary,
+}: {
+  cards: SourceStatusCard[];
+  summary: ReturnType<typeof getSourceReadinessSummary>;
+}) {
+  return (
+    <section className="border border-[#e0e0e0] bg-white">
+      <PanelHeader
+        title="소스 상태"
+        description="실서비스 연결 전 권한과 안정성을 확인합니다."
+        count={`${summary.readySources}/${summary.totalSources}`}
+      />
+
+      <div className="grid grid-cols-3 gap-px border-b border-[#e0e0e0] bg-[#e0e0e0] text-sm">
+        <SourceMetric label="확인 필요" value={summary.needsReviewSources} />
+        <SourceMetric label="저장 제한" value={summary.storageRestrictedSources} />
+        <SourceMetric label="보류" value={summary.blockedSources} />
+      </div>
+
+      <div>
+        {cards.map((card) => (
+          <article key={card.id} className="border-b border-[#e0e0e0] p-4 last:border-b-0">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-medium text-[#161616]">{card.name}</h3>
+                <p className="mt-1 text-sm text-[#525252]">
+                  {card.feedCount}개 지점 · {card.streamTypes.join(", ") || "형식 없음"}
+                </p>
+              </div>
+              <span className={`border px-2 py-1 text-xs ${sourceStatusClass[card.status]}`}>
+                {sourceStatusLabel[card.status]}
+              </span>
+            </div>
+
+            <dl className="mt-3 grid grid-cols-3 gap-px bg-[#e0e0e0] text-xs">
+              <SourceState label="정상" value={card.onlineFeeds} />
+              <SourceState label="지연" value={card.degradedFeeds} />
+              <SourceState label="끊김" value={card.offlineFeeds} />
+            </dl>
+
+            <div className="mt-3 space-y-1 text-sm text-[#525252]">
+              <p>저장: {policyLabel(card.storagePolicy)} · 재배포: {policyLabel(card.redistributionPolicy)}</p>
+              <p>{card.rateLimit}</p>
+              <p className="text-[#161616]">다음: {card.nextAction}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SourceMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-white p-3">
+      <p className="font-mono text-[11px] text-[#6f6f6f]">{label}</p>
+      <p className="mt-1 text-xl text-[#161616]">{value}</p>
+    </div>
+  );
+}
+
+function SourceState({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-[#f4f4f4] px-2 py-2">
+      <dt className="text-[#6f6f6f]">{label}</dt>
+      <dd className="mt-1 text-[#161616]">{value}</dd>
+    </div>
+  );
+}
+
+function policyLabel(policy: SourceStatusCard["storagePolicy"]): string {
+  if (policy === "allowed") {
+    return "가능";
+  }
+
+  if (policy === "restricted") {
+    return "제한";
+  }
+
+  return "확인 필요";
+}
+
+function ReviewHistoryPanel({ history }: { history: ReviewHistoryEntry[] }) {
+  return (
+    <section className="border border-[#e0e0e0] bg-white">
+      <PanelHeader title="검토 이력" description="브라우저 저장소에 최근 처리 내역을 남깁니다." count={`${history.length}건`} />
+
+      {history.length === 0 ? (
+        <div className="p-4 text-sm text-[#525252]">아직 검토 이력이 없습니다.</div>
+      ) : (
+        <div>
+          {history.slice(0, 5).map((entry) => (
+            <article key={entry.id} className="border-b border-[#e0e0e0] p-4 last:border-b-0">
+              <p className="font-mono text-xs text-[#6f6f6f]">{formatHistoryTime(entry.createdAt)}</p>
+              <h3 className="mt-2 font-medium text-[#161616]">{entry.eventLabel}</h3>
+              <p className="mt-1 text-sm text-[#525252]">{entry.feedName}</p>
+              <p className="mt-2 text-sm text-[#161616]">
+                {reviewLabel[entry.previousStatus]} → {reviewLabel[entry.nextStatus]}
+              </p>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function formatHistoryTime(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 function EventPanel({
