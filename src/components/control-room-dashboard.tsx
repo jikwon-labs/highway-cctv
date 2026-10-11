@@ -25,8 +25,10 @@ import {
 import {
   applyReviewHistoryToEvents,
   createReviewHistoryEntry,
+  getDefaultReviewReason,
   parseReviewHistory,
   reviewHistoryStorageKey,
+  reviewReasonOptions,
   serializeReviewHistory,
   type ReviewHistoryEntry,
 } from "@/lib/review-history";
@@ -115,6 +117,7 @@ export function ControlRoomDashboard({
   const [statusFilter, setStatusFilter] = useState<FeedStatusFilter>("all");
   const [apiStatus, setApiStatus] = useState("mock 데이터 사용 중");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [reviewReasonByEventId, setReviewReasonByEventId] = useState<Record<string, string>>({});
 
   const visibleFeeds = useMemo(
     () => filterFeedsByStatus(feeds, statusFilter),
@@ -152,6 +155,7 @@ export function ControlRoomDashboard({
         feed,
         previousStatus: event.reviewStatus,
         nextStatus: reviewStatus,
+        reasonNote: reviewReasonByEventId[event.id] ?? getDefaultReviewReason(reviewStatus),
         operator: "운영자",
         createdAt: new Date().toISOString(),
       }),
@@ -220,6 +224,13 @@ export function ControlRoomDashboard({
             events={priorityEvents}
             feeds={feeds}
             reviewHistory={reviewHistory}
+            reviewReasonByEventId={reviewReasonByEventId}
+            onReasonChange={(eventId, reason) =>
+              setReviewReasonByEventId((currentReasons) => ({
+                ...currentReasons,
+                [eventId]: reason,
+              }))
+            }
             onReview={handleReview}
           />
         </section>
@@ -503,6 +514,8 @@ function RightRail({
   events,
   feeds,
   reviewHistory,
+  reviewReasonByEventId,
+  onReasonChange,
   onReview,
 }: {
   sourceStatusCards: SourceStatusCard[];
@@ -510,12 +523,20 @@ function RightRail({
   events: DetectionEvent[];
   feeds: CctvFeed[];
   reviewHistory: ReviewHistoryEntry[];
+  reviewReasonByEventId: Record<string, string>;
+  onReasonChange: (eventId: string, reason: string) => void;
   onReview: (eventId: string, reviewStatus: ReviewStatus) => void;
 }) {
   return (
     <aside className="flex flex-col gap-4">
       <SourceStatusPanel cards={sourceStatusCards} summary={sourceSummary} />
-      <EventPanel events={events} feeds={feeds} onReview={onReview} />
+      <EventPanel
+        events={events}
+        feeds={feeds}
+        reviewReasonByEventId={reviewReasonByEventId}
+        onReasonChange={onReasonChange}
+        onReview={onReview}
+      />
       <ReviewHistoryPanel history={reviewHistory} />
     </aside>
   );
@@ -622,6 +643,7 @@ function ReviewHistoryPanel({ history }: { history: ReviewHistoryEntry[] }) {
               <p className="mt-2 text-sm text-[#161616]">
                 {reviewLabel[entry.previousStatus]} → {reviewLabel[entry.nextStatus]}
               </p>
+              {entry.reasonNote ? <p className="mt-1 text-sm text-[#525252]">사유: {entry.reasonNote}</p> : null}
             </article>
           ))}
         </div>
@@ -643,10 +665,14 @@ function formatHistoryTime(value: string): string {
 function EventPanel({
   events,
   feeds,
+  reviewReasonByEventId,
+  onReasonChange,
   onReview,
 }: {
   events: DetectionEvent[];
   feeds: CctvFeed[];
+  reviewReasonByEventId: Record<string, string>;
+  onReasonChange: (eventId: string, reason: string) => void;
   onReview: (eventId: string, reviewStatus: ReviewStatus) => void;
 }) {
   return (
@@ -656,6 +682,7 @@ function EventPanel({
       <div>
         {events.map((event) => {
           const feed = feeds.find((item) => item.id === event.feedId);
+          const selectedReason = reviewReasonByEventId[event.id] ?? getDefaultReviewReason("confirmed");
 
           return (
             <article key={event.id} className={`border-b border-l-4 border-b-[#e0e0e0] p-4 last:border-b-0 ${severityClass[event.severity]}`}>
@@ -674,6 +701,20 @@ function EventPanel({
                   <li key={item}>- {item}</li>
                 ))}
               </ul>
+              <label className="mt-4 block text-sm text-[#525252]">
+                처리 사유
+                <select
+                  className="mt-2 w-full border border-[#c6c6c6] bg-white px-3 py-2 text-sm text-[#161616]"
+                  value={selectedReason}
+                  onChange={(changeEvent) => onReasonChange(event.id, changeEvent.target.value)}
+                >
+                  {Object.values(reviewReasonOptions).flat().map((reason) => (
+                    <option key={reason} value={reason}>
+                      {reason}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="mt-4 grid grid-cols-3 gap-px bg-[#e0e0e0] text-sm">
                 <ReviewButton active={event.reviewStatus === "confirmed"} onClick={() => onReview(event.id, "confirmed")}>
                   확인

@@ -4,7 +4,9 @@ import { cctvFeeds, detectionEvents } from "./cctv";
 import {
   applyReviewHistoryToEvents,
   createReviewHistoryEntry,
+  getDefaultReviewReason,
   parseReviewHistory,
+  reviewReasonOptions,
   serializeReviewHistory,
 } from "./review-history";
 
@@ -17,6 +19,7 @@ describe("이벤트 검토 이력 도메인", () => {
       feed,
       previousStatus: "needs_review",
       nextStatus: "confirmed",
+      reasonNote: "CCTV 화면으로 정지 차량 확인",
       operator: "운영자",
       createdAt: "2026-10-11T10:20:00.000Z",
     });
@@ -29,9 +32,17 @@ describe("이벤트 검토 이력 도메인", () => {
       feedName: "서울요금소",
       previousStatus: "needs_review",
       nextStatus: "confirmed",
+      reasonNote: "CCTV 화면으로 정지 차량 확인",
       operator: "운영자",
       createdAt: "2026-10-11T10:20:00.000Z",
     });
+  });
+
+  it("검토 상태별 기본 처리 사유를 제공한다", () => {
+    expect(reviewReasonOptions.confirmed).toContain("CCTV 화면으로 확인");
+    expect(reviewReasonOptions.dismissed).toContain("움직임 정상 흐름");
+    expect(reviewReasonOptions.needs_review).toContain("추가 관찰 필요");
+    expect(getDefaultReviewReason("confirmed")).toBe("CCTV 화면으로 확인");
   });
 
   it("가장 최근 검토 이력으로 이벤트 상태를 복원한다", () => {

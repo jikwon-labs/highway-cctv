@@ -10,8 +10,15 @@ export type ReviewHistoryEntry = {
   feedName: string;
   previousStatus: ReviewStatus;
   nextStatus: ReviewStatus;
+  reasonNote?: string;
   operator: string;
   createdAt: string;
+};
+
+export const reviewReasonOptions: Record<ReviewStatus, string[]> = {
+  confirmed: ["CCTV 화면으로 확인", "반복 감지 확인", "현장 대응 필요"],
+  dismissed: ["움직임 정상 흐름", "일시적 영상 노이즈", "중복 후보"],
+  needs_review: ["추가 관찰 필요", "담당자 재검토", "근거 부족"],
 };
 
 export function createReviewHistoryEntry({
@@ -19,6 +26,7 @@ export function createReviewHistoryEntry({
   feed,
   previousStatus,
   nextStatus,
+  reasonNote = getDefaultReviewReason(nextStatus),
   operator,
   createdAt,
 }: {
@@ -26,6 +34,7 @@ export function createReviewHistoryEntry({
   feed: CctvFeed;
   previousStatus: ReviewStatus;
   nextStatus: ReviewStatus;
+  reasonNote?: string;
   operator: string;
   createdAt: string;
 }): ReviewHistoryEntry {
@@ -37,9 +46,14 @@ export function createReviewHistoryEntry({
     feedName: feed.name,
     previousStatus,
     nextStatus,
+    reasonNote,
     operator,
     createdAt,
   };
+}
+
+export function getDefaultReviewReason(status: ReviewStatus): string {
+  return reviewReasonOptions[status][0];
 }
 
 export function applyReviewHistoryToEvents(
@@ -105,6 +119,7 @@ function isReviewHistoryEntry(value: unknown): value is ReviewHistoryEntry {
     typeof entry.feedName === "string" &&
     isReviewStatus(entry.previousStatus) &&
     isReviewStatus(entry.nextStatus) &&
+    (entry.reasonNote === undefined || typeof entry.reasonNote === "string") &&
     typeof entry.operator === "string" &&
     typeof entry.createdAt === "string"
   );
