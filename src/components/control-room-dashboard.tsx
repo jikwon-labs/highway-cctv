@@ -27,6 +27,7 @@ import {
   buildEventTimeline,
   filterEventQueue,
   getNextSelectedEventId,
+  searchEventQueue,
   type EventQueueFilter,
   type EventTimelineItem,
 } from "@/lib/event-workflow";
@@ -133,6 +134,7 @@ export function ControlRoomDashboard({
   const [selectedEventId, setSelectedEventId] = useState(() => getNextSelectedEventId(initialEvents));
   const [statusFilter, setStatusFilter] = useState<FeedStatusFilter>("all");
   const [eventQueueFilter, setEventQueueFilter] = useState<EventQueueFilter>("needs_review");
+  const [eventSearchQuery, setEventSearchQuery] = useState("");
   const [apiStatus, setApiStatus] = useState("mock 데이터 사용 중");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [reviewReasonByEventId, setReviewReasonByEventId] = useState<Record<string, string>>({});
@@ -146,8 +148,8 @@ export function ControlRoomDashboard({
   const selectedFeedEvents = selectedFeed ? getEventsForFeed(events, selectedFeed.id) : [];
   const eventQueueSummary = useMemo(() => buildEventQueueSummary(events), [events]);
   const visibleQueueEvents = useMemo(
-    () => filterEventQueue(events, eventQueueFilter),
-    [events, eventQueueFilter],
+    () => searchEventQueue(filterEventQueue(events, eventQueueFilter), feeds, eventSearchQuery),
+    [events, eventQueueFilter, eventSearchQuery, feeds],
   );
   const priorityEvents = getTopPriorityEvents(visibleQueueEvents, 4);
   const selectedEvent = priorityEvents.find((event) => event.id === selectedEventId) ?? priorityEvents[0];
@@ -167,9 +169,16 @@ export function ControlRoomDashboard({
   }
 
   function handleEventQueueFilterChange(nextFilter: EventQueueFilter) {
-    const nextEvents = filterEventQueue(events, nextFilter);
+    const nextEvents = searchEventQueue(filterEventQueue(events, nextFilter), feeds, eventSearchQuery);
 
     setEventQueueFilter(nextFilter);
+    setSelectedEventId((currentEventId) => getNextSelectedEventId(nextEvents, currentEventId));
+  }
+
+  function handleEventSearchChange(nextQuery: string) {
+    const nextEvents = searchEventQueue(filterEventQueue(events, eventQueueFilter), feeds, nextQuery);
+
+    setEventSearchQuery(nextQuery);
     setSelectedEventId((currentEventId) => getNextSelectedEventId(nextEvents, currentEventId));
   }
 
@@ -259,7 +268,9 @@ export function ControlRoomDashboard({
             events={priorityEvents}
             eventQueueFilter={eventQueueFilter}
             eventQueueSummary={eventQueueSummary}
+            eventSearchQuery={eventSearchQuery}
             onEventQueueFilterChange={handleEventQueueFilterChange}
+            onEventSearchChange={handleEventSearchChange}
             selectedEventId={selectedEvent?.id ?? ""}
             onSelectEvent={setSelectedEventId}
             feeds={feeds}
@@ -622,7 +633,9 @@ function RightRail({
   events,
   eventQueueFilter,
   eventQueueSummary,
+  eventSearchQuery,
   onEventQueueFilterChange,
+  onEventSearchChange,
   selectedEventId,
   onSelectEvent,
   feeds,
@@ -636,7 +649,9 @@ function RightRail({
   events: DetectionEvent[];
   eventQueueFilter: EventQueueFilter;
   eventQueueSummary: Record<EventQueueFilter, number>;
+  eventSearchQuery: string;
   onEventQueueFilterChange: (filter: EventQueueFilter) => void;
+  onEventSearchChange: (query: string) => void;
   selectedEventId: string;
   onSelectEvent: (eventId: string) => void;
   feeds: CctvFeed[];
@@ -652,7 +667,9 @@ function RightRail({
         events={events}
         eventQueueFilter={eventQueueFilter}
         eventQueueSummary={eventQueueSummary}
+        eventSearchQuery={eventSearchQuery}
         onEventQueueFilterChange={onEventQueueFilterChange}
+        onEventSearchChange={onEventSearchChange}
         selectedEventId={selectedEventId}
         onSelectEvent={onSelectEvent}
         feeds={feeds}
@@ -789,7 +806,9 @@ function EventPanel({
   events,
   eventQueueFilter,
   eventQueueSummary,
+  eventSearchQuery,
   onEventQueueFilterChange,
+  onEventSearchChange,
   selectedEventId,
   onSelectEvent,
   feeds,
@@ -800,7 +819,9 @@ function EventPanel({
   events: DetectionEvent[];
   eventQueueFilter: EventQueueFilter;
   eventQueueSummary: Record<EventQueueFilter, number>;
+  eventSearchQuery: string;
   onEventQueueFilterChange: (filter: EventQueueFilter) => void;
+  onEventSearchChange: (query: string) => void;
   selectedEventId: string;
   onSelectEvent: (eventId: string) => void;
   feeds: CctvFeed[];
@@ -827,6 +848,17 @@ function EventPanel({
           </button>
         ))}
       </div>
+
+      <label className="block border-b border-[#e0e0e0] p-4 text-sm text-[#525252]">
+        감지 후보 검색
+        <input
+          className="mt-2 w-full border border-[#c6c6c6] bg-white px-3 py-2 text-sm text-[#161616] placeholder:text-[#8d8d8d]"
+          placeholder="지점, 이벤트, 근거 검색"
+          type="search"
+          value={eventSearchQuery}
+          onChange={(event) => onEventSearchChange(event.target.value)}
+        />
+      </label>
 
       <div>
         {events.length === 0 ? (

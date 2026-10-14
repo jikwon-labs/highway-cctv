@@ -1,4 +1,4 @@
-import { getTopPriorityEvents, type DetectionEvent, type ReviewStatus } from "./cctv";
+import { getTopPriorityEvents, type CctvFeed, type DetectionEvent, type ReviewStatus } from "./cctv";
 import type { ReviewHistoryEntry } from "./review-history";
 
 export type EventQueueFilter = "all" | "needs_review" | "critical" | "confirmed" | "dismissed";
@@ -77,6 +77,44 @@ export function buildEventQueueSummary(events: DetectionEvent[]): EventQueueSumm
     confirmed: events.filter((event) => event.reviewStatus === "confirmed").length,
     dismissed: events.filter((event) => event.reviewStatus === "dismissed").length,
   };
+}
+
+export function searchEventQueue(
+  events: DetectionEvent[],
+  feeds: CctvFeed[],
+  query: string,
+): DetectionEvent[] {
+  const normalizedQuery = normalizeSearchText(query);
+
+  if (!normalizedQuery) {
+    return events;
+  }
+
+  const feedById = new Map(feeds.map((feed) => [feed.id, feed]));
+
+  return events.filter((event) => {
+    const feed = feedById.get(event.feedId);
+    const searchableText = normalizeSearchText(
+      [
+        event.label,
+        event.type,
+        event.detectedAt,
+        ...event.evidence,
+        feed?.name,
+        feed?.route,
+        feed?.direction,
+        feed?.location,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+
+    return searchableText.includes(normalizedQuery);
+  });
+}
+
+function normalizeSearchText(value: string): string {
+  return value.trim().toLowerCase();
 }
 
 function formatHistoryTime(value: string): string {

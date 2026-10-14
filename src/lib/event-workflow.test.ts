@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { cctvFeeds, detectionEvents } from "./cctv";
-import { buildEventQueueSummary, buildEventTimeline, filterEventQueue, getNextSelectedEventId } from "./event-workflow";
+import {
+  buildEventQueueSummary,
+  buildEventTimeline,
+  filterEventQueue,
+  getNextSelectedEventId,
+  searchEventQueue,
+} from "./event-workflow";
 import { createReviewHistoryEntry } from "./review-history";
 
 describe("이벤트 상세/타임라인 도메인", () => {
@@ -78,5 +84,18 @@ describe("이벤트 상세/타임라인 도메인", () => {
       confirmed: 1,
       dismissed: 0,
     });
+  });
+
+  it("감지 후보 라벨, 근거, CCTV 지점명으로 큐를 검색한다", () => {
+    expect(searchEventQueue(detectionEvents, cctvFeeds, "역주행").map((event) => event.id)).toEqual([
+      "evt-wrong-way-01",
+    ]);
+    expect(searchEventQueue(detectionEvents, cctvFeeds, "용인").map((event) => event.id)).toEqual([
+      "evt-congestion-01",
+    ]);
+    expect(searchEventQueue(detectionEvents, cctvFeeds, "움직임").map((event) => event.id)).toEqual([
+      "evt-stopped-vehicle-01",
+      "evt-congestion-01",
+    ]);
   });
 });
