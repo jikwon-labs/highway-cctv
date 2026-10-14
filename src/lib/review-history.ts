@@ -21,6 +21,8 @@ export const reviewReasonOptions: Record<ReviewStatus, string[]> = {
   needs_review: ["추가 관찰 필요", "담당자 재검토", "근거 부족"],
 };
 
+export type ReviewReasonSelection = Partial<Record<ReviewStatus, string>>;
+
 export function createReviewHistoryEntry({
   event,
   feed,
@@ -56,6 +58,23 @@ export function getDefaultReviewReason(status: ReviewStatus): string {
   return reviewReasonOptions[status][0];
 }
 
+export function getReviewReasonOptions(status: ReviewStatus): string[] {
+  return [...reviewReasonOptions[status]];
+}
+
+export function getSelectedReviewReason(
+  selectedReasons: ReviewReasonSelection | undefined,
+  status: ReviewStatus,
+): string {
+  const selectedReason = selectedReasons?.[status];
+
+  if (selectedReason && reviewReasonOptions[status].includes(selectedReason)) {
+    return selectedReason;
+  }
+
+  return getDefaultReviewReason(status);
+}
+
 export function applyReviewHistoryToEvents(
   events: DetectionEvent[],
   history: ReviewHistoryEntry[],
@@ -84,6 +103,43 @@ export function applyReviewHistoryToEvents(
 
 export function serializeReviewHistory(history: ReviewHistoryEntry[]): string {
   return JSON.stringify(history);
+}
+
+export function exportReviewHistoryAsJson(history: ReviewHistoryEntry[]): string {
+  return JSON.stringify(history, null, 2);
+}
+
+export function exportReviewHistoryAsCsv(history: ReviewHistoryEntry[]): string {
+  const header = [
+    "createdAt",
+    "eventId",
+    "eventLabel",
+    "feedId",
+    "feedName",
+    "previousStatus",
+    "nextStatus",
+    "reasonNote",
+    "operator",
+  ];
+
+  return [
+    header.join(","),
+    ...history.map((entry) =>
+      [
+        entry.createdAt,
+        entry.eventId,
+        entry.eventLabel,
+        entry.feedId,
+        entry.feedName,
+        entry.previousStatus,
+        entry.nextStatus,
+        entry.reasonNote ?? "",
+        entry.operator,
+      ]
+        .map(escapeCsvValue)
+        .join(","),
+    ),
+  ].join("\n");
 }
 
 export function parseReviewHistory(rawValue: string | null): ReviewHistoryEntry[] {
@@ -127,4 +183,12 @@ function isReviewHistoryEntry(value: unknown): value is ReviewHistoryEntry {
 
 function isReviewStatus(value: unknown): value is ReviewStatus {
   return value === "needs_review" || value === "confirmed" || value === "dismissed";
+}
+
+function escapeCsvValue(value: string): string {
+  if (!/[",\n]/.test(value)) {
+    return value;
+  }
+
+  return `"${value.replaceAll('"', '""')}"`;
 }

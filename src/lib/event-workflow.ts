@@ -3,6 +3,8 @@ import type { ReviewHistoryEntry } from "./review-history";
 
 export type EventQueueFilter = "all" | "needs_review" | "critical" | "confirmed" | "dismissed";
 
+export type EventQueueSort = "priority" | "confidence" | "latest" | "feed";
+
 export type EventQueueSummary = Record<EventQueueFilter, number>;
 
 export type EventTimelineItem = {
@@ -110,6 +112,36 @@ export function searchEventQueue(
     );
 
     return searchableText.includes(normalizedQuery);
+  });
+}
+
+export function sortEventQueue(
+  events: DetectionEvent[],
+  feeds: CctvFeed[],
+  sort: EventQueueSort,
+): DetectionEvent[] {
+  if (sort === "priority") {
+    return getTopPriorityEvents(events, events.length);
+  }
+
+  const feedById = new Map(feeds.map((feed) => [feed.id, feed]));
+
+  return [...events].sort((a, b) => {
+    if (sort === "confidence") {
+      return b.confidence - a.confidence;
+    }
+
+    if (sort === "latest") {
+      return b.detectedAt.localeCompare(a.detectedAt);
+    }
+
+    const feedNameDelta = (feedById.get(a.feedId)?.name ?? "").localeCompare(feedById.get(b.feedId)?.name ?? "", "ko-KR");
+
+    if (feedNameDelta !== 0) {
+      return feedNameDelta;
+    }
+
+    return b.detectedAt.localeCompare(a.detectedAt);
   });
 }
 

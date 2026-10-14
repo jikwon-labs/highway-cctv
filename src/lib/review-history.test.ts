@@ -4,7 +4,11 @@ import { cctvFeeds, detectionEvents } from "./cctv";
 import {
   applyReviewHistoryToEvents,
   createReviewHistoryEntry,
+  exportReviewHistoryAsCsv,
+  exportReviewHistoryAsJson,
   getDefaultReviewReason,
+  getReviewReasonOptions,
+  getSelectedReviewReason,
   parseReviewHistory,
   reviewReasonOptions,
   serializeReviewHistory,
@@ -43,6 +47,10 @@ describe("이벤트 검토 이력 도메인", () => {
     expect(reviewReasonOptions.dismissed).toContain("움직임 정상 흐름");
     expect(reviewReasonOptions.needs_review).toContain("추가 관찰 필요");
     expect(getDefaultReviewReason("confirmed")).toBe("CCTV 화면으로 확인");
+    expect(getReviewReasonOptions("dismissed")).toEqual(["움직임 정상 흐름", "일시적 영상 노이즈", "중복 후보"]);
+    expect(getReviewReasonOptions("dismissed")).not.toContain("CCTV 화면으로 확인");
+    expect(getSelectedReviewReason({ dismissed: "중복 후보" }, "dismissed")).toBe("중복 후보");
+    expect(getSelectedReviewReason({ dismissed: "CCTV 화면으로 확인" }, "dismissed")).toBe("움직임 정상 흐름");
   });
 
   it("가장 최근 검토 이력으로 이벤트 상태를 복원한다", () => {
@@ -81,5 +89,25 @@ describe("이벤트 검토 이력 도메인", () => {
     expect(parseReviewHistory(serializeReviewHistory([entry]))).toEqual([entry]);
     expect(parseReviewHistory("not-json")).toEqual([]);
     expect(parseReviewHistory(JSON.stringify([{ eventId: "missing-fields" }]))).toEqual([]);
+  });
+
+  it("검토 이력을 JSON/CSV로 내보낼 문자열을 만든다", () => {
+    const entry = createReviewHistoryEntry({
+      event: detectionEvents[0],
+      feed: cctvFeeds[0],
+      previousStatus: "needs_review",
+      nextStatus: "confirmed",
+      reasonNote: "CCTV 화면으로 확인",
+      operator: "운영자",
+      createdAt: "2026-10-11T10:22:00.000Z",
+    });
+
+    expect(exportReviewHistoryAsJson([entry])).toBe(JSON.stringify([entry], null, 2));
+    expect(exportReviewHistoryAsCsv([entry])).toBe(
+      [
+        "createdAt,eventId,eventLabel,feedId,feedName,previousStatus,nextStatus,reasonNote,operator",
+        "2026-10-11T10:22:00.000Z,evt-stopped-vehicle-01,정지 차량 후보,feed-gyeongbu-seoul-tg,서울요금소,needs_review,confirmed,CCTV 화면으로 확인,운영자",
+      ].join("\n"),
+    );
   });
 });

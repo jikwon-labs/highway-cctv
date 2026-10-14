@@ -7,6 +7,7 @@ import {
   filterEventQueue,
   getNextSelectedEventId,
   searchEventQueue,
+  sortEventQueue,
 } from "./event-workflow";
 import { createReviewHistoryEntry } from "./review-history";
 
@@ -96,6 +97,33 @@ describe("이벤트 상세/타임라인 도메인", () => {
     expect(searchEventQueue(detectionEvents, cctvFeeds, "움직임").map((event) => event.id)).toEqual([
       "evt-stopped-vehicle-01",
       "evt-congestion-01",
+    ]);
+  });
+
+  it("운영 큐를 우선순위, 신뢰도, 최신순, 지점순으로 정렬한다", () => {
+    expect(sortEventQueue(detectionEvents, cctvFeeds, "priority").map((event) => event.id)).toEqual([
+      "evt-stopped-vehicle-01",
+      "evt-wrong-way-01",
+      "evt-congestion-01",
+      "evt-weather-01",
+    ]);
+    expect(sortEventQueue(detectionEvents, cctvFeeds, "confidence").map((event) => event.id)).toEqual([
+      "evt-stopped-vehicle-01",
+      "evt-congestion-01",
+      "evt-wrong-way-01",
+      "evt-weather-01",
+    ]);
+    expect(sortEventQueue(detectionEvents, cctvFeeds, "latest").map((event) => event.id)).toEqual([
+      "evt-stopped-vehicle-01",
+      "evt-wrong-way-01",
+      "evt-congestion-01",
+      "evt-weather-01",
+    ]);
+    expect(sortEventQueue(detectionEvents, cctvFeeds, "feed").map((event) => event.id)).toEqual([
+      "evt-weather-01",
+      "evt-stopped-vehicle-01",
+      "evt-congestion-01",
+      "evt-wrong-way-01",
     ]);
   });
 });

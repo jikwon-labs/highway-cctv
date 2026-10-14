@@ -7,7 +7,6 @@ import type { CctvSnapshot, CctvSourceRuntimeStatus } from "@/lib/cctv-api";
 import { getCctvSourceLabel, mergeCctvSnapshot } from "@/lib/cctv-api";
 import {
   getControlRoomSummary,
-  getTopPriorityEvents,
   type CctvFeed,
   type DetectionEvent,
   type EventSeverity,
@@ -28,18 +27,23 @@ import {
   filterEventQueue,
   getNextSelectedEventId,
   searchEventQueue,
+  sortEventQueue,
   type EventQueueFilter,
+  type EventQueueSort,
   type EventTimelineItem,
 } from "@/lib/event-workflow";
 import {
   applyReviewHistoryToEvents,
   createReviewHistoryEntry,
-  getDefaultReviewReason,
+  exportReviewHistoryAsCsv,
+  exportReviewHistoryAsJson,
+  getReviewReasonOptions,
+  getSelectedReviewReason,
   parseReviewHistory,
   reviewHistoryStorageKey,
-  reviewReasonOptions,
   serializeReviewHistory,
   type ReviewHistoryEntry,
+  type ReviewReasonSelection,
 } from "@/lib/review-history";
 import {
   buildSourceStatusCards,
@@ -112,6 +116,19 @@ const eventQueueFilterOptions: Array<{ label: string; value: EventQueueFilter }>
   { label: "오탐", value: "dismissed" },
 ];
 
+const eventQueueSortOptions: Array<{ label: string; value: EventQueueSort }> = [
+  { label: "긴급도순", value: "priority" },
+  { label: "신뢰도순", value: "confidence" },
+  { label: "최신순", value: "latest" },
+  { label: "지점순", value: "feed" },
+];
+
+const reviewTargetStatusOptions: Array<{ label: string; value: ReviewStatus }> = [
+  { label: "확인", value: "confirmed" },
+  { label: "오탐", value: "dismissed" },
+  { label: "대기", value: "needs_review" },
+];
+
 const defaultRuntimeStatus: CctvSourceRuntimeStatus = {
   requestedMode: "mock",
   effectiveMode: "mock",
@@ -143,11 +160,13 @@ export function ControlRoomDashboard({
   const [selectedEventId, setSelectedEventId] = useState(() => getNextSelectedEventId(initialEvents));
   const [statusFilter, setStatusFilter] = useState<FeedStatusFilter>("all");
   const [eventQueueFilter, setEventQueueFilter] = useState<EventQueueFilter>("needs_review");
+  const [eventQueueSort, setEventQueueSort] = useState<EventQueueSort>("priority");
   const [eventSearchQuery, setEventSearchQuery] = useState("");
   const [apiStatus, setApiStatus] = useState("mock 데이터 사용 중");
   const [sourceRuntimeStatus, setSourceRuntimeStatus] = useState<CctvSourceRuntimeStatus>(defaultRuntimeStatus);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [reviewReasonByEventId, setReviewReasonByEventId] = useState<Record<string, string>>({});
+  const [reviewTargetStatusByEventId, setReviewTargetStatusByEventId] = useState<Record<string, ReviewStatus>>({});
+  const [reviewReasonByEventId, setReviewReasonByEventId] = useState<Record<string, ReviewReasonSelection>>({});
 
   const visibleFeeds = useMemo(
     () => filterFeedsByStatus(feeds, statusFilter),
@@ -158,10 +177,10 @@ export function ControlRoomDashboard({
   const selectedFeedEvents = selectedFeed ? getEventsForFeed(events, selectedFeed.id) : [];
   const eventQueueSummary = useMemo(() => buildEventQueueSummary(events), [events]);
   const visibleQueueEvents = useMemo(
-    () => searchEventQueue(filterEventQueue(events, eventQueueFilter), feeds, eventSearchQuery),
-    [events, eventQueueFilter, eventSearchQuery, feeds],
+    () => sortEventQueue(searchEventQueue(filterEventQueue(events, eventQueueFilter), feeds, eventSearchQuery), feeds, eventQueueSort),
+    [events, eventQueueFilter, eventQueueSort, eventSearchQuery, feeds],
   );
-  const priorityEvents = getTopPriorityEvents(visibleQueueEvents, 4);
+  const priorityEvents = visibleQueueEvents.slice(0, 4);
   const selectedEvent = priorityEvents.find((event) => event.id === selectedEventId) ?? priorityEvents[0];
   const selectedEventTimeline = selectedEvent ? buildEventTimeline(selectedEvent, reviewHistory) : [];
   const summary = getControlRoomSummary(feeds, events);
@@ -179,14 +198,21 @@ export function ControlRoomDashboard({
   }
 
   function handleEventQueueFilterChange(nextFilter: EventQueueFilter) {
-    const nextEvents = searchEventQueue(filterEventQueue(events, nextFilter), feeds, eventSearchQuery);
+    const nextEvents = sortEventQueue(searchEventQueue(filterEventQueue(events, nextFilter), feeds, eventSearchQuery), feeds, eventQueueSort);
 
     setEventQueueFilter(nextFilter);
     setSelectedEventId((currentEventId) => getNextSelectedEventId(nextEvents, currentEventId));
   }
 
+  function handleEventQueueSortChange(nextSort: EventQueueSort) {
+    const nextEvents = sortEventQueue(searchEventQueue(filterEventQueue(events, eventQueueFilter), feeds, eventSearchQuery), feeds, nextSort);
+
+    setEventQueueSort(nextSort);
+    setSelectedEventId((currentEventId) => getNextSelectedEventId(nextEvents, currentEventId));
+  }
+
   function handleEventSearchChange(nextQuery: string) {
-    const nextEvents = searchEventQueue(filterEventQueue(events, eventQueueFilter), feeds, nextQuery);
+    const nextEvents = sortEventQueue(searchEventQueue(filterEventQueue(events, eventQueueFilter), feeds, nextQuery), feeds, eventQueueSort);
 
     setEventSearchQuery(nextQuery);
     setSelectedEventId((currentEventId) => getNextSelectedEventId(nextEvents, currentEventId));
@@ -206,7 +232,7 @@ export function ControlRoomDashboard({
         feed,
         previousStatus: event.reviewStatus,
         nextStatus: reviewStatus,
-        reasonNote: reviewReasonByEventId[event.id] ?? getDefaultReviewReason(reviewStatus),
+        reasonNote: getSelectedReviewReason(reviewReasonByEventId[event.id], reviewStatus),
         operator: "운영자",
         createdAt: new Date().toISOString(),
       }),
@@ -283,19 +309,31 @@ export function ControlRoomDashboard({
             sourceSummary={sourceSummary}
             events={priorityEvents}
             eventQueueFilter={eventQueueFilter}
+            eventQueueSort={eventQueueSort}
             eventQueueSummary={eventQueueSummary}
             eventSearchQuery={eventSearchQuery}
             onEventQueueFilterChange={handleEventQueueFilterChange}
+            onEventQueueSortChange={handleEventQueueSortChange}
             onEventSearchChange={handleEventSearchChange}
             selectedEventId={selectedEvent?.id ?? ""}
             onSelectEvent={setSelectedEventId}
             feeds={feeds}
             reviewHistory={reviewHistory}
+            reviewTargetStatusByEventId={reviewTargetStatusByEventId}
             reviewReasonByEventId={reviewReasonByEventId}
+            onTargetStatusChange={(eventId, status) =>
+              setReviewTargetStatusByEventId((currentStatuses) => ({
+                ...currentStatuses,
+                [eventId]: status,
+              }))
+            }
             onReasonChange={(eventId, reason) =>
               setReviewReasonByEventId((currentReasons) => ({
                 ...currentReasons,
-                [eventId]: reason,
+                [eventId]: {
+                  ...currentReasons[eventId],
+                  [reviewTargetStatusByEventId[eventId] ?? "confirmed"]: reason,
+                },
               }))
             }
             onReview={handleReview}
@@ -664,15 +702,19 @@ function RightRail({
   sourceSummary,
   events,
   eventQueueFilter,
+  eventQueueSort,
   eventQueueSummary,
   eventSearchQuery,
   onEventQueueFilterChange,
+  onEventQueueSortChange,
   onEventSearchChange,
   selectedEventId,
   onSelectEvent,
   feeds,
   reviewHistory,
+  reviewTargetStatusByEventId,
   reviewReasonByEventId,
+  onTargetStatusChange,
   onReasonChange,
   onReview,
 }: {
@@ -680,15 +722,19 @@ function RightRail({
   sourceSummary: ReturnType<typeof getSourceReadinessSummary>;
   events: DetectionEvent[];
   eventQueueFilter: EventQueueFilter;
+  eventQueueSort: EventQueueSort;
   eventQueueSummary: Record<EventQueueFilter, number>;
   eventSearchQuery: string;
   onEventQueueFilterChange: (filter: EventQueueFilter) => void;
+  onEventQueueSortChange: (sort: EventQueueSort) => void;
   onEventSearchChange: (query: string) => void;
   selectedEventId: string;
   onSelectEvent: (eventId: string) => void;
   feeds: CctvFeed[];
   reviewHistory: ReviewHistoryEntry[];
-  reviewReasonByEventId: Record<string, string>;
+  reviewTargetStatusByEventId: Record<string, ReviewStatus>;
+  reviewReasonByEventId: Record<string, ReviewReasonSelection>;
+  onTargetStatusChange: (eventId: string, status: ReviewStatus) => void;
   onReasonChange: (eventId: string, reason: string) => void;
   onReview: (eventId: string, reviewStatus: ReviewStatus) => void;
 }) {
@@ -698,14 +744,18 @@ function RightRail({
       <EventPanel
         events={events}
         eventQueueFilter={eventQueueFilter}
+        eventQueueSort={eventQueueSort}
         eventQueueSummary={eventQueueSummary}
         eventSearchQuery={eventSearchQuery}
         onEventQueueFilterChange={onEventQueueFilterChange}
+        onEventQueueSortChange={onEventQueueSortChange}
         onEventSearchChange={onEventSearchChange}
         selectedEventId={selectedEventId}
         onSelectEvent={onSelectEvent}
         feeds={feeds}
+        reviewTargetStatusByEventId={reviewTargetStatusByEventId}
         reviewReasonByEventId={reviewReasonByEventId}
+        onTargetStatusChange={onTargetStatusChange}
         onReasonChange={onReasonChange}
         onReview={onReview}
       />
@@ -799,9 +849,41 @@ function policyLabel(policy: SourceStatusCard["storagePolicy"]): string {
 }
 
 function ReviewHistoryPanel({ history }: { history: ReviewHistoryEntry[] }) {
+  function handleDownload(format: "json" | "csv") {
+    const content = format === "json" ? exportReviewHistoryAsJson(history) : exportReviewHistoryAsCsv(history);
+    const mimeType = format === "json" ? "application/json" : "text/csv";
+    const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = `review-history.${format}`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <section className="border border-[#e0e0e0] bg-white">
       <PanelHeader title="검토 이력" description="브라우저 저장소에 최근 처리 내역을 남깁니다." count={`${history.length}건`} />
+
+      <div className="grid grid-cols-2 gap-px border-b border-[#e0e0e0] bg-[#e0e0e0] text-sm">
+        <button
+          className="bg-white px-3 py-2 text-left text-[#0f62fe] disabled:text-[#8d8d8d]"
+          type="button"
+          disabled={history.length === 0}
+          onClick={() => handleDownload("json")}
+        >
+          JSON 다운로드
+        </button>
+        <button
+          className="bg-white px-3 py-2 text-left text-[#0f62fe] disabled:text-[#8d8d8d]"
+          type="button"
+          disabled={history.length === 0}
+          onClick={() => handleDownload("csv")}
+        >
+          CSV 다운로드
+        </button>
+      </div>
 
       {history.length === 0 ? (
         <div className="p-4 text-sm text-[#525252]">아직 검토 이력이 없습니다.</div>
@@ -837,27 +919,35 @@ function formatHistoryTime(value: string): string {
 function EventPanel({
   events,
   eventQueueFilter,
+  eventQueueSort,
   eventQueueSummary,
   eventSearchQuery,
   onEventQueueFilterChange,
+  onEventQueueSortChange,
   onEventSearchChange,
   selectedEventId,
   onSelectEvent,
   feeds,
+  reviewTargetStatusByEventId,
   reviewReasonByEventId,
+  onTargetStatusChange,
   onReasonChange,
   onReview,
 }: {
   events: DetectionEvent[];
   eventQueueFilter: EventQueueFilter;
+  eventQueueSort: EventQueueSort;
   eventQueueSummary: Record<EventQueueFilter, number>;
   eventSearchQuery: string;
   onEventQueueFilterChange: (filter: EventQueueFilter) => void;
+  onEventQueueSortChange: (sort: EventQueueSort) => void;
   onEventSearchChange: (query: string) => void;
   selectedEventId: string;
   onSelectEvent: (eventId: string) => void;
   feeds: CctvFeed[];
-  reviewReasonByEventId: Record<string, string>;
+  reviewTargetStatusByEventId: Record<string, ReviewStatus>;
+  reviewReasonByEventId: Record<string, ReviewReasonSelection>;
+  onTargetStatusChange: (eventId: string, status: ReviewStatus) => void;
   onReasonChange: (eventId: string, reason: string) => void;
   onReview: (eventId: string, reviewStatus: ReviewStatus) => void;
 }) {
@@ -881,16 +971,32 @@ function EventPanel({
         ))}
       </div>
 
-      <label className="block border-b border-[#e0e0e0] p-4 text-sm text-[#525252]">
-        감지 후보 검색
-        <input
-          className="mt-2 w-full border border-[#c6c6c6] bg-white px-3 py-2 text-sm text-[#161616] placeholder:text-[#8d8d8d]"
-          placeholder="지점, 이벤트, 근거 검색"
-          type="search"
-          value={eventSearchQuery}
-          onChange={(event) => onEventSearchChange(event.target.value)}
-        />
-      </label>
+      <div className="grid gap-px border-b border-[#e0e0e0] bg-[#e0e0e0] md:grid-cols-[1fr_160px]">
+        <label className="block bg-white p-4 text-sm text-[#525252]">
+          감지 후보 검색
+          <input
+            className="mt-2 w-full border border-[#c6c6c6] bg-white px-3 py-2 text-sm text-[#161616] placeholder:text-[#8d8d8d]"
+            placeholder="지점, 이벤트, 근거 검색"
+            type="search"
+            value={eventSearchQuery}
+            onChange={(event) => onEventSearchChange(event.target.value)}
+          />
+        </label>
+        <label className="block bg-white p-4 text-sm text-[#525252]">
+          정렬
+          <select
+            className="mt-2 w-full border border-[#c6c6c6] bg-white px-3 py-2 text-sm text-[#161616]"
+            value={eventQueueSort}
+            onChange={(event) => onEventQueueSortChange(event.target.value as EventQueueSort)}
+          >
+            {eventQueueSortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <div>
         {events.length === 0 ? (
@@ -898,7 +1004,8 @@ function EventPanel({
         ) : null}
         {events.map((event) => {
           const feed = feeds.find((item) => item.id === event.feedId);
-          const selectedReason = reviewReasonByEventId[event.id] ?? getDefaultReviewReason("confirmed");
+          const targetStatus = reviewTargetStatusByEventId[event.id] ?? "confirmed";
+          const selectedReason = getSelectedReviewReason(reviewReasonByEventId[event.id], targetStatus);
           const selected = event.id === selectedEventId;
 
           return (
@@ -932,56 +1039,49 @@ function EventPanel({
                   <li key={item}>- {item}</li>
                 ))}
               </ul>
-              <label className="mt-4 block text-sm text-[#525252]">
-                처리 사유
-                <select
-                  className="mt-2 w-full border border-[#c6c6c6] bg-white px-3 py-2 text-sm text-[#161616]"
-                  value={selectedReason}
-                  onChange={(changeEvent) => onReasonChange(event.id, changeEvent.target.value)}
+              <div className="mt-4 grid gap-3 border border-[#e0e0e0] bg-[#f4f4f4] p-3">
+                <label className="block text-sm text-[#525252]">
+                  처리 상태
+                  <select
+                    className="mt-2 w-full border border-[#c6c6c6] bg-white px-3 py-2 text-sm text-[#161616]"
+                    value={targetStatus}
+                    onChange={(changeEvent) => onTargetStatusChange(event.id, changeEvent.target.value as ReviewStatus)}
+                  >
+                    {reviewTargetStatusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm text-[#525252]">
+                  {reviewLabel[targetStatus]} 사유
+                  <select
+                    className="mt-2 w-full border border-[#c6c6c6] bg-white px-3 py-2 text-sm text-[#161616]"
+                    value={selectedReason}
+                    onChange={(changeEvent) => onReasonChange(event.id, changeEvent.target.value)}
+                  >
+                    {getReviewReasonOptions(targetStatus).map((reason) => (
+                      <option key={reason} value={reason}>
+                        {reason}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="bg-[#0f62fe] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#0043ce] disabled:cursor-not-allowed disabled:bg-[#8d8d8d]"
+                  type="button"
+                  disabled={event.reviewStatus === targetStatus}
+                  onClick={() => onReview(event.id, targetStatus)}
                 >
-                  {Object.values(reviewReasonOptions).flat().map((reason) => (
-                    <option key={reason} value={reason}>
-                      {reason}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="mt-4 grid grid-cols-3 gap-px bg-[#e0e0e0] text-sm">
-                <ReviewButton active={event.reviewStatus === "confirmed"} onClick={() => onReview(event.id, "confirmed")}>
-                  확인
-                </ReviewButton>
-                <ReviewButton active={event.reviewStatus === "dismissed"} onClick={() => onReview(event.id, "dismissed")}>
-                  오탐
-                </ReviewButton>
-                <ReviewButton active={event.reviewStatus === "needs_review"} onClick={() => onReview(event.id, "needs_review")}>
-                  대기
-                </ReviewButton>
+                  선택 상태로 처리
+                </button>
               </div>
             </article>
           );
         })}
       </div>
     </aside>
-  );
-}
-
-function ReviewButton({
-  active,
-  children,
-  onClick,
-}: {
-  active: boolean;
-  children: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={`${active ? "bg-[#0f62fe] text-white" : "bg-white text-[#525252] hover:bg-[#f4f4f4]"} px-3 py-2`}
-      type="button"
-      onClick={onClick}
-    >
-      {children}
-    </button>
   );
 }
 
