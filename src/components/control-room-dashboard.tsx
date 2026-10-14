@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { VideoPlayer } from "@/components/video-player";
-import type { CctvSnapshot } from "@/lib/cctv-api";
+import type { CctvSnapshot, CctvSourceRuntimeStatus } from "@/lib/cctv-api";
 import { getCctvSourceLabel, mergeCctvSnapshot } from "@/lib/cctv-api";
 import {
   getControlRoomSummary,
@@ -112,6 +112,15 @@ const eventQueueFilterOptions: Array<{ label: string; value: EventQueueFilter }>
   { label: "오탐", value: "dismissed" },
 ];
 
+const defaultRuntimeStatus: CctvSourceRuntimeStatus = {
+  requestedMode: "mock",
+  effectiveMode: "mock",
+  label: "mock 데이터",
+  hasApiKey: false,
+  isRealSource: false,
+  notice: "샘플 데이터로 화면과 운영 흐름을 검증 중입니다.",
+};
+
 function readStoredReviewHistory(): ReviewHistoryEntry[] {
   if (typeof window === "undefined") {
     return [];
@@ -136,6 +145,7 @@ export function ControlRoomDashboard({
   const [eventQueueFilter, setEventQueueFilter] = useState<EventQueueFilter>("needs_review");
   const [eventSearchQuery, setEventSearchQuery] = useState("");
   const [apiStatus, setApiStatus] = useState("mock 데이터 사용 중");
+  const [sourceRuntimeStatus, setSourceRuntimeStatus] = useState<CctvSourceRuntimeStatus>(defaultRuntimeStatus);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [reviewReasonByEventId, setReviewReasonByEventId] = useState<Record<string, string>>({});
 
@@ -227,6 +237,7 @@ export function ControlRoomDashboard({
       setEvents(mergedSnapshot.events);
       setSelectedFeedId((currentFeedId) => getNextSelectedFeedId(nextVisibleFeeds, currentFeedId));
       setSelectedEventId((currentEventId) => getNextSelectedEventId(mergedSnapshot.events, currentEventId));
+      setSourceRuntimeStatus(snapshot.meta.runtimeStatus ?? defaultRuntimeStatus);
       setApiStatus(`${getCctvSourceLabel(snapshot.meta.source)} · ${snapshot.meta.generatedAt.slice(11, 19)} 갱신`);
     } catch (error) {
       setApiStatus(error instanceof Error ? `갱신 실패 · ${error.message}` : "갱신 실패");
@@ -237,7 +248,12 @@ export function ControlRoomDashboard({
 
   return (
     <main className="min-h-screen bg-[#f4f4f4] text-[#161616]">
-      <Header apiStatus={apiStatus} isRefreshing={isRefreshing} onRefresh={handleRefresh} />
+      <Header
+        apiStatus={apiStatus}
+        isRefreshing={isRefreshing}
+        sourceRuntimeStatus={sourceRuntimeStatus}
+        onRefresh={handleRefresh}
+      />
 
       <div className="mx-auto flex min-h-screen w-full max-w-[1584px] flex-col gap-4 px-4 py-4 md:px-8">
         <SummaryCards summary={summary} />
@@ -293,12 +309,16 @@ export function ControlRoomDashboard({
 function Header({
   apiStatus,
   isRefreshing,
+  sourceRuntimeStatus,
   onRefresh,
 }: {
   apiStatus: string;
   isRefreshing: boolean;
+  sourceRuntimeStatus: CctvSourceRuntimeStatus;
   onRefresh: () => void;
 }) {
+  const sourceModeLabel = sourceRuntimeStatus.isRealSource ? "실제 소스" : "안전 모드";
+
   return (
     <header className="border-b border-[#393939] bg-[#161616] text-white">
       <div className="mx-auto flex max-w-[1584px] flex-col gap-5 px-4 py-5 md:px-8 lg:flex-row lg:items-end lg:justify-between">
@@ -310,8 +330,20 @@ function Header({
           </p>
         </div>
 
-        <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center">
-          <span className="border border-[#525252] px-3 py-2 text-[#e0e0e0]">{apiStatus}</span>
+        <div className="flex max-w-xl flex-col gap-3 text-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <span className="border border-[#525252] px-3 py-2 text-[#e0e0e0]">{apiStatus}</span>
+            <span
+              className={`border px-3 py-2 ${
+                sourceRuntimeStatus.isRealSource
+                  ? "border-[#24a148] bg-[#16391f] text-[#defbe6]"
+                  : "border-[#6f6f6f] bg-[#262626] text-[#e0e0e0]"
+              }`}
+            >
+              {sourceModeLabel} · {sourceRuntimeStatus.label}
+            </span>
+          </div>
+          <p className="text-left text-xs leading-5 text-[#c6c6c6] sm:text-right">{sourceRuntimeStatus.notice}</p>
           <button
             className="bg-[#0f62fe] px-4 py-3 font-medium text-white transition hover:bg-[#0043ce] disabled:cursor-not-allowed disabled:bg-[#6f6f6f]"
             type="button"

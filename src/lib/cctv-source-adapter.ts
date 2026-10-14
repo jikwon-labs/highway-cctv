@@ -1,4 +1,4 @@
-import { buildCctvSnapshot, type CctvSnapshot } from "./cctv-api";
+import { buildCctvSnapshot, type CctvSnapshot, type CctvSourceRuntimeStatus } from "./cctv-api";
 import { cctvFeeds, detectionEvents, type CctvFeed, type DetectionEvent } from "./cctv";
 import {
   buildItsCctvInfoUrl,
@@ -104,13 +104,57 @@ export function getConfiguredCctvSourceAdapter(env: {
   CCTV_SOURCE_MODE?: string;
   ITS_API_KEY?: string;
 }): CctvSourceAdapter {
-  const mode = parseSourceMode(env.CCTV_SOURCE_MODE);
+  const runtimeStatus = getCctvSourceRuntimeStatus(env);
 
-  if (mode === "its" && env.ITS_API_KEY) {
+  if (runtimeStatus.effectiveMode === "its" && env.ITS_API_KEY) {
     return createItsCctvSourceAdapter({ apiKey: env.ITS_API_KEY });
   }
 
   return createMockCctvSourceAdapter();
+}
+
+export function getCctvSourceRuntimeStatus(env: {
+  CCTV_SOURCE_MODE?: string;
+  ITS_API_KEY?: string;
+}): CctvSourceRuntimeStatus {
+  const requestedMode = parseSourceMode(env.CCTV_SOURCE_MODE);
+  const hasApiKey = Boolean(env.ITS_API_KEY);
+  const effectiveMode: CctvSourceMode = requestedMode === "its" && hasApiKey ? "its" : "mock";
+
+  if (requestedMode === "its" && !hasApiKey) {
+    return {
+      requestedMode,
+      effectiveMode,
+      label: "mock 데이터",
+      hasApiKey,
+      isRealSource: false,
+      notice: "ITS 모드가 요청됐지만 API 키가 없어 mock 데이터로 폴백했습니다.",
+    };
+  }
+
+  if (effectiveMode === "its") {
+    return {
+      requestedMode,
+      effectiveMode,
+      label: "ITS 실제 소스",
+      hasApiKey,
+      isRealSource: true,
+      notice: "ITS 실제 소스 모드입니다. 좌표 박스, 캐시, 오류 마스킹 가드가 적용됩니다.",
+    };
+  }
+
+  return {
+    requestedMode,
+    effectiveMode,
+    label: "mock 데이터",
+    hasApiKey,
+    isRealSource: false,
+    notice: "샘플 데이터로 화면과 운영 흐름을 검증 중입니다.",
+  };
+}
+
+export function redactSourceErrorMessage(message: string): string {
+  return message.replace(/apiKey=([^&\s]+)/gi, "apiKey=***");
 }
 
 function validateItsRequestPolicy(params: Omit<ItsCctvInfoParams, "apiKey">) {

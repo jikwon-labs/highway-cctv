@@ -5,6 +5,8 @@ import {
   createItsCctvSourceAdapter,
   createMockCctvSourceAdapter,
   getConfiguredCctvSourceAdapter,
+  getCctvSourceRuntimeStatus,
+  redactSourceErrorMessage,
 } from "./cctv-source-adapter";
 
 describe("CCTV source adapters", () => {
@@ -142,5 +144,42 @@ describe("CCTV source adapters", () => {
     expect(mockAdapter.id).toBe("mock");
     expect(fallbackAdapter.id).toBe("mock");
     expect(itsAdapter.id).toBe("its");
+  });
+
+  it("환경 변수 기준 실제 호출 모드와 폴백 상태를 설명한다", () => {
+    expect(getCctvSourceRuntimeStatus({ CCTV_SOURCE_MODE: "mock" })).toEqual({
+      requestedMode: "mock",
+      effectiveMode: "mock",
+      label: "mock 데이터",
+      hasApiKey: false,
+      isRealSource: false,
+      notice: "샘플 데이터로 화면과 운영 흐름을 검증 중입니다.",
+    });
+    expect(getCctvSourceRuntimeStatus({ CCTV_SOURCE_MODE: "its" })).toEqual({
+      requestedMode: "its",
+      effectiveMode: "mock",
+      label: "mock 데이터",
+      hasApiKey: false,
+      isRealSource: false,
+      notice: "ITS 모드가 요청됐지만 API 키가 없어 mock 데이터로 폴백했습니다.",
+    });
+    expect(getCctvSourceRuntimeStatus({ CCTV_SOURCE_MODE: "its", ITS_API_KEY: "test-key" })).toMatchObject({
+      requestedMode: "its",
+      effectiveMode: "its",
+      label: "ITS 실제 소스",
+      hasApiKey: true,
+      isRealSource: true,
+    });
+  });
+
+  it("source adapter 오류 메시지에서 API 키와 URL query를 마스킹한다", () => {
+    const message = redactSourceErrorMessage(
+      "ITS API 403 https://openapi.its.go.kr:9443/cctvInfo?apiKey=test-key&type=ex&getType=json",
+    );
+
+    expect(message).toBe(
+      "ITS API 403 https://openapi.its.go.kr:9443/cctvInfo?apiKey=***&type=ex&getType=json",
+    );
+    expect(message).not.toContain("test-key");
   });
 });

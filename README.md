@@ -24,6 +24,7 @@
 - mock/ITS 공통 source adapter 계층
 - `/api/cctv` source adapter route와 대시보드 갱신 버튼
 - ITS 실제 호출 전 좌표 박스 안전 가드, 60초 캐시, 502 오류 응답
+- `/api/cctv` runtime status와 대시보드 상단 실제/mock 모드 표시
 - API 키 마스킹 유틸
 - Vitest 단위 테스트
 
@@ -32,6 +33,7 @@
 - 실제 CCTV 대량 호출, 영상 저장, 재배포, 재인코딩은 하지 않습니다.
 - API 키/약관/트래픽/프레임 추출 가능 여부 확인 전까지 실제 스트림 연결은 소수 샘플로 제한합니다.
 - AI 결과는 확정 판정이 아니라 운영자 검토용 후보로 표시합니다.
+- 실제 ITS 테스트는 `.env.local`에만 키를 넣고 `/api/cctv` 단일 호출로 먼저 확인합니다.
 
 ## 실행
 

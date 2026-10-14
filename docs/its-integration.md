@@ -27,8 +27,9 @@ ITS_API_KEY="발급받은 ITS 인증키"
 - mock/ITS 공통 source adapter 계층
 - `/api/cctv`에서 환경 변수 기반 source adapter 선택
 - ITS adapter 좌표 박스 안전 가드
-- source adapter 실패 시 `/api/cctv` 502 JSON 오류 반환
-- 대시보드 갱신 상태에서 `mock 데이터`/`ITS 실제 소스` 구분 표시
+- `/api/cctv` 응답 `meta.runtimeStatus`에 요청 모드, 실제 적용 모드, API 키 존재 여부, 안내 문구 포함
+- source adapter 실패 시 `/api/cctv` 502 JSON 오류 반환. 오류 메시지의 `apiKey` query 값은 `***`로 마스킹
+- 대시보드 상단에서 `안전 모드 · mock 데이터` 또는 `실제 소스 · ITS 실제 소스`를 구분 표시
 - HLS.js 기반 클라이언트 플레이어 컴포넌트
 - streamUrl이 없을 때 안전한 플레이스홀더 표시
 
@@ -40,6 +41,30 @@ ITS_API_KEY="발급받은 ITS 인증키"
 - ITS adapter는 기본 60초 캐시로 짧은 시간 안의 반복 갱신 호출을 줄임
 - 안전 범위를 넘으면 fetch 전에 차단하고 실제 API를 호출하지 않음
 - API route는 adapter 오류를 502 JSON으로 반환해 화면에서 갱신 실패로 표시
+
+## 소량 ITS 호출 전 점검 절차
+
+1. ITS 이용 약관, 트래픽 한도, 영상 저장/재배포 가능 여부를 확인합니다.
+2. `.env.local`에만 값을 넣습니다. 실제 키는 문서, 커밋, 채팅에 남기지 않습니다.
+
+```bash
+CCTV_SOURCE_MODE=its
+ITS_API_KEY="발급받은 ITS 인증키"
+```
+
+3. 개발 서버를 실행하고 `/api/cctv`를 한 번만 호출합니다.
+
+```bash
+pnpm dev
+curl -s http://localhost:3000/api/cctv
+```
+
+4. 응답에서 아래 항목만 확인합니다.
+   - `meta.runtimeStatus.effectiveMode`가 `its`인지
+   - `meta.feedCount`가 예상 범위인지
+   - stream URL이 화면/로그에 불필요하게 노출되지 않는지
+5. 실패 응답은 502 JSON으로 확인합니다. 오류 공유 시 `apiKey=***` 형태로 마스킹되어야 합니다.
+6. 반복 호출은 피합니다. adapter 기본 캐시는 60초지만, 실제 테스트는 필요한 최소 횟수만 수행합니다.
 
 ## 금지/주의
 

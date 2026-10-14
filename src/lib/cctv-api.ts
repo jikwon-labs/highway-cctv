@@ -1,11 +1,21 @@
 import type { CctvFeed, DetectionEvent } from "./cctv";
 
+export type CctvSourceRuntimeStatus = {
+  requestedMode: "mock" | "its";
+  effectiveMode: "mock" | "its";
+  label: "mock 데이터" | "ITS 실제 소스";
+  hasApiKey: boolean;
+  isRealSource: boolean;
+  notice: string;
+};
+
 export type CctvSnapshot = {
   meta: {
     source: "mock" | "its";
     generatedAt: string;
     feedCount: number;
     eventCount: number;
+    runtimeStatus?: CctvSourceRuntimeStatus;
   };
   feeds: CctvFeed[];
   events: DetectionEvent[];
@@ -16,6 +26,7 @@ export function buildCctvSnapshot(
   events: DetectionEvent[],
   generatedAt = new Date(),
   source: CctvSnapshot["meta"]["source"] = "mock",
+  runtimeStatus?: CctvSourceRuntimeStatus,
 ): CctvSnapshot {
   return {
     meta: {
@@ -23,6 +34,7 @@ export function buildCctvSnapshot(
       generatedAt: generatedAt.toISOString(),
       feedCount: feeds.length,
       eventCount: events.length,
+      ...(runtimeStatus ? { runtimeStatus } : {}),
     },
     feeds: cloneFeeds(feeds),
     events: cloneEvents(events),

@@ -17,6 +17,26 @@ describe("CCTV mock API snapshot", () => {
     expect(snapshot.events).toHaveLength(4);
   });
 
+  it("실제/mock 런타임 상태를 snapshot meta에 함께 담을 수 있다", () => {
+    const snapshot = buildCctvSnapshot(cctvFeeds, detectionEvents, new Date("2026-10-11T10:00:00.000Z"), "mock", {
+      requestedMode: "its",
+      effectiveMode: "mock",
+      label: "mock 데이터",
+      hasApiKey: false,
+      isRealSource: false,
+      notice: "ITS 모드가 요청됐지만 API 키가 없어 mock 데이터로 폴백했습니다.",
+    });
+
+    expect(snapshot.meta.runtimeStatus).toEqual({
+      requestedMode: "its",
+      effectiveMode: "mock",
+      label: "mock 데이터",
+      hasApiKey: false,
+      isRealSource: false,
+      notice: "ITS 모드가 요청됐지만 API 키가 없어 mock 데이터로 폴백했습니다.",
+    });
+  });
+
   it("API 갱신 시 기존 운영자 검토 상태를 유지한다", () => {
     const localEvents = detectionEvents.map((event) =>
       event.id === "evt-stopped-vehicle-01" ? { ...event, reviewStatus: "confirmed" as const } : event,
