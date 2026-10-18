@@ -1,0 +1,334 @@
+{
+  "summary": {
+    "checks": 26,
+    "passed": 26,
+    "failed": []
+  },
+  "checks": [
+    {
+      "name": "marker counts and severity",
+      "passed": true,
+      "data": [
+        {
+          "name": "지도에서 서울요금소 선택",
+          "count": "1",
+          "severity": "critical"
+        },
+        {
+          "name": "지도에서 판교 JC 선택",
+          "count": "1",
+          "severity": "critical"
+        },
+        {
+          "name": "지도에서 용인 IC 선택",
+          "count": "1",
+          "severity": "warning"
+        },
+        {
+          "name": "지도에서 매송 IC 선택",
+          "count": "1",
+          "severity": "warning"
+        },
+        {
+          "name": "지도에서 하남 JC 선택",
+          "count": "0",
+          "severity": "none"
+        },
+        {
+          "name": "지도에서 터널 샘플 선택",
+          "count": "0",
+          "severity": "none"
+        }
+      ]
+    },
+    {
+      "name": "map click selects CCTV and event",
+      "passed": true,
+      "data": {
+        "feed": "feed-yeongdong-yongin",
+        "event": "evt-congestion-01",
+        "marker": "지도에서 용인 IC 선택"
+      }
+    },
+    {
+      "name": "event click selects video and map",
+      "passed": true,
+      "data": {
+        "feed": "feed-gyeongbu-pangyo",
+        "event": "evt-wrong-way-01",
+        "marker": "지도에서 판교 JC 선택"
+      }
+    },
+    {
+      "name": "no event clears old detail",
+      "passed": true,
+      "data": {
+        "feed": "feed-jungbu-hanam",
+        "event": "",
+        "marker": "지도에서 하남 JC 선택"
+      }
+    },
+    {
+      "name": "confirmed candidate independent of queue",
+      "passed": true,
+      "data": {
+        "feed": "feed-seohaean-maesong",
+        "event": "evt-weather-01",
+        "marker": "지도에서 매송 IC 선택"
+      }
+    },
+    {
+      "name": "empty search does not change workspace",
+      "passed": true,
+      "data": {
+        "feed": "feed-seohaean-maesong",
+        "event": "evt-weather-01",
+        "marker": "지도에서 매송 IC 선택"
+      }
+    },
+    {
+      "name": "local candidate card selection",
+      "passed": true,
+      "data": {
+        "feed": "feed-yeongdong-yongin",
+        "event": "evt-congestion-01",
+        "marker": "지도에서 용인 IC 선택"
+      }
+    },
+    {
+      "name": "degraded feed filter matching event",
+      "passed": true,
+      "data": {
+        "feed": "feed-yeongdong-yongin",
+        "event": "evt-congestion-01",
+        "marker": "지도에서 용인 IC 선택"
+      }
+    },
+    {
+      "name": "event selection reveals hidden CCTV",
+      "passed": true,
+      "data": {
+        "feed": "feed-gyeongbu-pangyo",
+        "event": "evt-wrong-way-01",
+        "marker": "지도에서 판교 JC 선택"
+      }
+    },
+    {
+      "name": "refresh preserves context",
+      "passed": true,
+      "data": {
+        "feed": "feed-gyeongbu-pangyo",
+        "event": "evt-wrong-way-01",
+        "marker": "지도에서 판교 JC 선택"
+      }
+    },
+    {
+      "name": "no runtime error after flows",
+      "passed": true,
+      "data": []
+    },
+    {
+      "name": "final desktop marker hit targets",
+      "passed": true,
+      "data": [
+        {
+          "name": "지도에서 서울요금소 선택",
+          "clickable": true,
+          "width": 111.109375,
+          "height": 44
+        },
+        {
+          "name": "지도에서 판교 JC 선택",
+          "clickable": true,
+          "width": 97.96875,
+          "height": 44
+        },
+        {
+          "name": "지도에서 용인 IC 선택",
+          "clickable": true,
+          "width": 95.3125,
+          "height": 44
+        },
+        {
+          "name": "지도에서 매송 IC 선택",
+          "clickable": true,
+          "width": 95.3125,
+          "height": 44
+        },
+        {
+          "name": "지도에서 하남 JC 선택",
+          "clickable": true,
+          "width": 72.765625,
+          "height": 44
+        },
+        {
+          "name": "지도에서 터널 샘플 선택",
+          "clickable": true,
+          "width": 78.859375,
+          "height": 44
+        }
+      ]
+    },
+    {
+      "name": "mobile marker hit targets",
+      "passed": true,
+      "data": [
+        {
+          "name": "지도에서 서울요금소 선택",
+          "clickable": true,
+          "left": 174.4609375,
+          "right": 285.5703125,
+          "height": 44
+        },
+        {
+          "name": "지도에서 판교 JC 선택",
+          "clickable": true,
+          "left": 240.921875,
+          "right": 338.890625,
+          "height": 44
+        },
+        {
+          "name": "지도에서 용인 IC 선택",
+          "clickable": true,
+          "left": 240,
+          "right": 335.3125,
+          "height": 44
+        },
+        {
+          "name": "지도에서 매송 IC 선택",
+          "clickable": true,
+          "left": 52.421875,
+          "right": 147.734375,
+          "height": 44
+        },
+        {
+          "name": "지도에서 하남 JC 선택",
+          "clickable": true,
+          "left": 253.5234375,
+          "right": 326.2890625,
+          "height": 44
+        },
+        {
+          "name": "지도에서 터널 샘플 선택",
+          "clickable": true,
+          "left": 60.6484375,
+          "right": 139.5078125,
+          "height": 44
+        }
+      ]
+    },
+    {
+      "name": "mobile horizontal overflow",
+      "passed": true,
+      "data": {
+        "scrollWidth": 390,
+        "viewport": 390
+      }
+    },
+    {
+      "name": "mobile coordinate click selects feed and candidate",
+      "passed": true,
+      "data": {
+        "feed": "feed-yeongdong-yongin",
+        "event": "evt-congestion-01"
+      }
+    },
+    {
+      "name": "final no runtime errors",
+      "passed": true,
+      "data": []
+    },
+    {
+      "name": "review dismissal immediately removes map candidate badge",
+      "passed": true,
+      "data": {
+        "count": "0",
+        "severity": "none"
+      }
+    },
+    {
+      "name": "keyboard selects CCTV and clears unrelated candidate",
+      "passed": true,
+      "data": {
+        "feed": "feed-jungbu-hanam",
+        "event": ""
+      }
+    },
+    {
+      "name": "320px layout without marker overlap or page overflow",
+      "passed": true,
+      "data": {
+        "width": 320,
+        "viewport": 320,
+        "overlap": false
+      }
+    },
+    {
+      "name": "1440px layout without marker overlap or page overflow",
+      "passed": true,
+      "data": {
+        "width": 1425,
+        "viewport": 1440,
+        "overlap": false
+      }
+    },
+    {
+      "name": "no runtime errors at completion",
+      "passed": true,
+      "data": []
+    },
+    {
+      "name": "390px layout without marker overlap or page overflow",
+      "passed": true,
+      "data": {
+        "width": 390,
+        "viewport": 390,
+        "overlap": false
+      }
+    },
+    {
+      "name": "final real pointer click selects matching candidate",
+      "passed": true,
+      "data": {
+        "feed": "feed-gyeongbu-pangyo",
+        "event": "evt-wrong-way-01"
+      }
+    },
+    {
+      "name": "delayed refresh preserves latest 용인 IC selection",
+      "passed": true,
+      "data": {
+        "before": {
+          "feed": "feed-yeongdong-yongin",
+          "event": "evt-congestion-01"
+        },
+        "after": {
+          "feed": "feed-yeongdong-yongin",
+          "event": "evt-congestion-01"
+        }
+      }
+    },
+    {
+      "name": "delayed refresh preserves latest 하남 JC selection",
+      "passed": true,
+      "data": {
+        "before": {
+          "feed": "feed-jungbu-hanam",
+          "event": ""
+        },
+        "after": {
+          "feed": "feed-jungbu-hanam",
+          "event": ""
+        }
+      }
+    },
+    {
+      "name": "atomic selection event-to-video regression",
+      "passed": true,
+      "data": {
+        "feed": "feed-gyeongbu-pangyo",
+        "event": "evt-wrong-way-01"
+      }
+    }
+  ]
+}
