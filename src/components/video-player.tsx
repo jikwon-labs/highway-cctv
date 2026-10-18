@@ -4,7 +4,7 @@ import Hls from "hls.js";
 import { useEffect, useRef, useState } from "react";
 
 import type { CctvFeed } from "@/lib/cctv";
-import { getPlaybackStrategy } from "@/lib/playback";
+import { getPlaybackStrategy, getHlsEngine, getPlaybackErrorMessage } from "@/lib/playback";
 
 export function VideoPlayer({ feed }: { feed: CctvFeed }) {
   if (getPlaybackStrategy(feed.streamUrl, feed.streamType) === "placeholder") {
@@ -16,6 +16,7 @@ export function VideoPlayer({ feed }: { feed: CctvFeed }) {
 
 function PlaybackSession({ feed }: { feed: CctvFeed }) {
   const [requested, setRequested] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   if (!requested) {
     return (
       <div className="flex min-h-[420px] items-center justify-center border border-[#c6c6c6] bg-[#161616] p-6 text-white">
@@ -32,9 +33,9 @@ function PlaybackSession({ feed }: { feed: CctvFeed }) {
     <div>
       <div className="flex items-center justify-between gap-3 border border-[#c6c6c6] bg-[#f4f4f4] p-3 text-sm">
         <span>출처: {feed.source} · 저장/분석 없음</span>
-        <button className="shrink-0 text-[#0f62fe] underline" type="button" onClick={() => setRequested(false)}>영상 연결 중지</button>
+        <div className="flex shrink-0 gap-3"><button className="text-[#0f62fe] underline" type="button" onClick={() => setAttempt((value) => value + 1)}>다시 연결</button><button className="text-[#0f62fe] underline" type="button" onClick={() => setRequested(false)}>영상 연결 중지</button></div>
       </div>
-      <ConnectedVideo feed={feed} />
+      <ConnectedVideo key={attempt} feed={feed} />
     </div>
   );
 }
@@ -53,18 +54,20 @@ function ConnectedVideo({ feed }: { feed: CctvFeed }) {
       video!.removeAttribute("src");
       video!.load();
     }
-    if (strategy === "native-video" || video.canPlayType("application/vnd.apple.mpegurl")) {
+    const engine = strategy === "native-video" ? "native" : getHlsEngine(Hls.isSupported(), video.canPlayType("application/vnd.apple.mpegurl"));
+    video.dataset.playbackEngine = engine;
+    if (engine === "native") {
       video.src = feed.streamUrl;
       return clearVideo;
     }
-    if (!Hls.isSupported()) {
+    if (engine === "unsupported") {
       queueMicrotask(() => setMediaState("HLS 미지원"));
       return;
     }
     const hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 0 });
     hls.on(Hls.Events.MANIFEST_PARSED, () => setMediaState("영상 재생 준비됨"));
     hls.on(Hls.Events.ERROR, (_, data) => {
-      setMediaState(data.fatal ? "영상 연결 실패 · URL 만료 또는 접근 제한을 확인하세요" : "영상 연결 복구 중");
+      setMediaState(data.fatal ? getPlaybackErrorMessage({ hlsType: data.type, details: data.details, httpStatus: data.response?.code }) : "영상 연결 복구 중");
       if (data.fatal) hls.stopLoad();
     });
     hls.loadSource(feed.streamUrl);
@@ -90,7 +93,7 @@ function ConnectedVideo({ feed }: { feed: CctvFeed }) {
           controls muted playsInline preload="metadata"
           onPlaying={() => setMediaState("영상 재생 중")}
           onWaiting={() => setMediaState("영상 버퍼링 중")}
-          onError={() => setMediaState("영상 연결 실패 · URL 만료 또는 접근 제한을 확인하세요")}
+          onError={() => setMediaState(getPlaybackErrorMessage({ mediaCode: videoRef.current?.error?.code }))}
         />
       )}
     </div>

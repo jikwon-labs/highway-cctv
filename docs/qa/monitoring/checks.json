@@ -1,0 +1,299 @@
+{
+  "mode": "mock interaction QA; ITS mode initial render only; OSM tiles blocked",
+  "total": 51,
+  "passed": 51,
+  "checks": [
+    {
+      "name": "critical-marker-style",
+      "passed": true,
+      "actual": "rgb(255, 241, 241)"
+    },
+    {
+      "name": "marker-touch-target",
+      "passed": true,
+      "actual": [
+        44,
+        44
+      ]
+    },
+    {
+      "name": "road-map-attribution",
+      "passed": true
+    },
+    {
+      "name": "no-automatic-media",
+      "passed": true
+    },
+    {
+      "name": "no-automatic-metadata",
+      "passed": true
+    },
+    {
+      "name": "tv-add-four",
+      "passed": true,
+      "actual": [
+        "서울요금소",
+        "판교 JC",
+        "용인 IC",
+        "매송 IC"
+      ]
+    },
+    {
+      "name": "tv-storage-allowlist",
+      "passed": true,
+      "actual": [
+        "key",
+        "name",
+        "route",
+        "coordinates"
+      ]
+    },
+    {
+      "name": "tv-four-limit",
+      "passed": true
+    },
+    {
+      "name": "no-event-location-clears-detail",
+      "passed": true
+    },
+    {
+      "name": "no-js-errors",
+      "passed": true,
+      "actual": []
+    },
+    {
+      "name": "map-canvas-height",
+      "passed": true,
+      "actual": 280
+    },
+    {
+      "name": "tv-revisit-restores-four",
+      "passed": true,
+      "actual": [
+        "서울요금소",
+        "판교 JC",
+        "용인 IC",
+        "매송 IC"
+      ]
+    },
+    {
+      "name": "monitor-no-auto-media",
+      "passed": true
+    },
+    {
+      "name": "monitor-no-auto-metadata",
+      "passed": true
+    },
+    {
+      "name": "tv-reorder",
+      "passed": true,
+      "actual": [
+        "판교 JC",
+        "서울요금소",
+        "용인 IC",
+        "매송 IC"
+      ]
+    },
+    {
+      "name": "tv-explicit-metadata-refresh",
+      "passed": true
+    },
+    {
+      "name": "metadata-does-not-autoplay",
+      "passed": true
+    },
+    {
+      "name": "tv-delayed-request-held",
+      "passed": true
+    },
+    {
+      "name": "tv-remove-ignores-late-response",
+      "passed": true
+    },
+    {
+      "name": "tv-reorder-remove-survive-reload",
+      "passed": true
+    },
+    {
+      "name": "candidate-list-only-four",
+      "passed": true,
+      "actual": [
+        "서울요금소",
+        "판교 JC",
+        "용인 IC",
+        "매송 IC"
+      ]
+    },
+    {
+      "name": "candidate-excludes-non-event-markers",
+      "passed": true
+    },
+    {
+      "name": "dismiss-removes-location-and-marker",
+      "passed": true
+    },
+    {
+      "name": "candidate-review-restored-on-revisit",
+      "passed": true
+    },
+    {
+      "name": "candidate-last-dismiss-no-wrong-video",
+      "passed": true
+    },
+    {
+      "name": "malformed-tv-storage-safe",
+      "passed": true
+    },
+    {
+      "name": "monitor-width-320",
+      "passed": true,
+      "actual": [
+        320,
+        320
+      ]
+    },
+    {
+      "name": "monitor-width-390",
+      "passed": true,
+      "actual": [
+        390,
+        390
+      ]
+    },
+    {
+      "name": "monitor-width-1440",
+      "passed": true,
+      "actual": [
+        1440,
+        1440
+      ]
+    },
+    {
+      "name": "tv-quota-error-feedback",
+      "passed": true
+    },
+    {
+      "name": "dashboard-width-320",
+      "passed": true,
+      "actual": [
+        320,
+        320
+      ]
+    },
+    {
+      "name": "dashboard-width-390",
+      "passed": true,
+      "actual": [
+        390,
+        390
+      ]
+    },
+    {
+      "name": "dashboard-width-1440",
+      "passed": true,
+      "actual": [
+        1440,
+        1440
+      ]
+    },
+    {
+      "name": "map-coordinate-click-selects-feed",
+      "passed": true
+    },
+    {
+      "name": "map-keyboard-selects-feed",
+      "passed": true
+    },
+    {
+      "name": "delayed-refresh-preserves-latest-selection",
+      "passed": true
+    },
+    {
+      "name": "nearby-no-auto-permission-or-api",
+      "passed": true
+    },
+    {
+      "name": "nearby-explicit-permission",
+      "passed": true
+    },
+    {
+      "name": "nearby-cancel-ignores-late-gps",
+      "passed": true
+    },
+    {
+      "name": "nearby-denied-permission-feedback",
+      "passed": true
+    },
+    {
+      "name": "nearby-only-coarse-bbox",
+      "passed": true,
+      "actual": {
+        "minX": "127.15",
+        "maxX": "127.3",
+        "minY": "37.45",
+        "maxY": "37.6"
+      }
+    },
+    {
+      "name": "nearby-selects-nearest-cctv",
+      "passed": true
+    },
+    {
+      "name": "nearby-distance-label",
+      "passed": true
+    },
+    {
+      "name": "nearby-exact-location-not-persisted",
+      "passed": true
+    },
+    {
+      "name": "nearby-refresh-preserves-region-and-selection",
+      "passed": true
+    },
+    {
+      "name": "nearby-stop-clears-position",
+      "passed": true
+    },
+    {
+      "name": "candidates-same-feed-dismiss-detail",
+      "passed": true,
+      "actual": {
+        "sameFeed": true,
+        "detail": "",
+        "hasOther": true
+      },
+      "fixture": "mock-only second candidate assigned to same CCTV"
+    },
+    {
+      "name": "all-same-feed-dismiss-detail",
+      "passed": true,
+      "actual": {
+        "sameFeed": true,
+        "detail": "evt-stopped-vehicle-01",
+        "hasOther": true
+      },
+      "fixture": "mock-only second candidate assigned to same CCTV"
+    },
+    {
+      "name": "nearby-cancel-ignores-late-network",
+      "passed": true
+    },
+    {
+      "name": "real-initial-home",
+      "passed": true,
+      "actual": {
+        "real": true,
+        "videos": 0
+      }
+    },
+    {
+      "name": "real-initial-candidates",
+      "passed": true,
+      "actual": {
+        "real": true,
+        "videos": 0,
+        "heading": "후보 감지 지점"
+      }
+    }
+  ]
+}

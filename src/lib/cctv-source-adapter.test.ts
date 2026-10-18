@@ -10,6 +10,77 @@ import {
 } from "./cctv-source-adapter";
 
 describe("CCTV source adapters", () => {
+  it("blocks unsafe direct ITS parameters before fetching, including non-finite and inverted boxes", async () => {
+    const base = { roadType: "ex" as const, cctvType: "4" as const, responseType: "json" as const,
+      minX: 127, maxX: 127.15, minY: 37, maxY: 37.15 };
+    for (const change of [{ minX: NaN }, { maxY: Infinity }, { minX: 128 }, { maxY: 37 },
+      { maxX: 127.35 }, { minY: 32.9 }, { roadType: "all" as const }, { cctvType: "1" as const }]) {
+      const fetcher = vi.fn(async () => ({ response: { data: [] } }));
+      const adapter = createItsCctvSourceAdapter({ apiKey: "fixture-policy", params: { ...base, ...change }, fetcher });
+      await expect(adapter.getSnapshot()).rejects.toThrow("ITS request blocked");
+      expect(fetcher).not.toHaveBeenCalled();
+    }
+  });
+
+  it("rejects invalid configured overrides even in mock mode", () => {
+    const bounds = { minX: 127.001, maxX: 127.15, minY: 37, maxY: 37.15 };
+    expect(() => getConfiguredCctvSourceAdapter({ CCTV_SOURCE_MODE: "mock" }, bounds)).toThrow("Invalid CCTV bounds");
+  });
+
+  it("keeps configured region TTL at 60 seconds across repeated adapter lookups", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-11T10:42:00.000Z"));
+    const fetcher = vi.fn<(url: URL) => Promise<Response>>(async () => new Response(JSON.stringify({ response: { data: [] } })));
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      const env = { CCTV_SOURCE_MODE: "its", ITS_API_KEY: "fixture-region-ttl" };
+      const bounds = { minX: 127, maxX: 127.15, minY: 37, maxY: 37.15 };
+      await getConfiguredCctvSourceAdapter(env, bounds).getSnapshot();
+      vi.advanceTimersByTime(59_999);
+      await getConfiguredCctvSourceAdapter(env, bounds).getSnapshot();
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(1);
+      await getConfiguredCctvSourceAdapter(env, bounds).getSnapshot();
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    } finally { vi.useRealTimers(); vi.unstubAllGlobals(); }
+  });
+  it("retains at most eight configured regions and evicts the least recently used", () => {
+    const env = { CCTV_SOURCE_MODE: "its", ITS_API_KEY: "fixture-region-lru" };
+    const bounds = Array.from({ length: 9 }, (_, index) => ({
+      minX: (2500 + index) / 20, maxX: (2503 + index) / 20, minY: 37, maxY: 37.15,
+    }));
+    const adapters = bounds.slice(0, 8).map((box) => getConfiguredCctvSourceAdapter(env, box));
+    expect(getConfiguredCctvSourceAdapter(env, bounds[0])).toBe(adapters[0]);
+    getConfiguredCctvSourceAdapter(env, bounds[8]);
+    expect(getConfiguredCctvSourceAdapter(env, bounds[0])).toBe(adapters[0]);
+    expect(getConfiguredCctvSourceAdapter(env, bounds[1])).not.toBe(adapters[1]);
+    // Reloading the evicted region itself must evict the next LRU entry.
+    expect(getConfiguredCctvSourceAdapter(env, bounds[2])).not.toBe(adapters[2]);
+  });
+  it("configured bbox overrides only coordinates, isolates regions and shares same-region cache/in-flight", async () => {
+    const fetcher = vi.fn<(url: URL) => Promise<Response>>(async () => new Response(JSON.stringify({ response: { data: [] } })));
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      const env = { CCTV_SOURCE_MODE: "its", ITS_API_KEY: "fixture-region-isolation" };
+      const bounds = { minX: 127.05, maxX: 127.2, minY: 37.25, maxY: 37.4 };
+      const otherBounds = { ...bounds, minX: 127.1, maxX: 127.25 };
+      const first = getConfiguredCctvSourceAdapter(env, bounds);
+      const same = getConfiguredCctvSourceAdapter({ ...env }, { ...bounds });
+      const other = getConfiguredCctvSourceAdapter(env, otherBounds);
+      expect(first).toBe(same);
+      expect(first).not.toBe(other);
+      await Promise.all([first.getSnapshot(), same.getSnapshot(), other.getSnapshot()]);
+      await getConfiguredCctvSourceAdapter(env, bounds).getSnapshot();
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      const urls = fetcher.mock.calls.map((call) => new URL(String(call[0])));
+      expect(urls[0].searchParams.get("minX")).toBe("127.05");
+      expect(urls[1].searchParams.get("minX")).toBe("127.1");
+      for (const url of urls) {
+        expect(url.searchParams.get("type")).toBe("ex");
+        expect(url.searchParams.get("cctvType")).toBe("4");
+      }
+    } finally { vi.unstubAllGlobals(); }
+  });
   it("mock adapter는 기존 샘플 피드와 감지 후보를 동일한 snapshot 형태로 반환한다", async () => {
     const adapter = createMockCctvSourceAdapter({
       feeds: cctvFeeds,
@@ -202,7 +273,7 @@ describe("CCTV source adapters", () => {
   });
 
   it("업스트림 fetch는 시간 제한과 redirect 차단을 사용한다", async () => {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ response: { data: [] } })));
+    const fetcher = vi.fn<(url: URL) => Promise<Response>>(async () => new Response(JSON.stringify({ response: { data: [] } })));
     vi.stubGlobal("fetch", fetcher);
     try {
       await createItsCctvSourceAdapter({ apiKey: "fixture-key" }).getSnapshot();

@@ -41,8 +41,11 @@ ITS_API_KEY="발급받은 ITS 인증키"
 
 - 기본값은 항상 `CCTV_SOURCE_MODE=mock`
 - `CCTV_SOURCE_MODE=its`라도 `ITS_API_KEY`가 없으면 mock adapter로 폴백
-- ITS 요청 좌표 박스는 경도/위도 각각 1도 이하, 면적 0.75도² 이하만 허용
-- ITS adapter는 동일 서버 프로세스의 route 요청들이 공유하는 60초 캐시와 in-flight 요청 합치기를 사용함. 다중 프로세스/서버리스 인스턴스 전체를 제한하는 분산 rate limit은 아님
+- ITS 요청 좌표 박스는 경도/위도 각각 0.3도 이하만 허용 (국내 범위 밖·역전/동일 경계 차단)
+- ITS adapter는 동일 서버 프로세스에서 key+bbox 기준 최대 8개 LRU를 유지하고, 구역별 60초 캐시와 in-flight 요청을 공유함. 다중 프로세스/서버리스 인스턴스 전체를 제한하는 분산 rate limit은 아님
+- 주변 조회 query는 minX/maxX/minY/maxY 네 필드만 허용. 국내 영역·0.05도 격자·축별 최대 0.3도 검증 후 요청하며 원본 GPS/정확도를 받지 않음
+- 위치 동의 전 자동 GPS/ITS 요청 없음. 위치 사용 중지·화면 이탈 시 진행 중 응답을 무효화함
+- TV 모니터는 CCTV 지점 정보만 localStorage에 저장하며 영상 URL/인증키/GPS는 저장하지 않음. 사용자 정보 갱신 후 지점의 이름+좌표로 새 메타데이터를 매칭함
 - 기본 조회 범위는 경도 127.1~127.12, 위도 37.32~37.35의 소구역으로 제한
 - upstream 요청에는 10초 timeout과 redirect 차단을 적용하고, 원본 네트워크 예외 메시지를 노출하지 않음
 - 안전 범위를 넘으면 fetch 전에 차단하고 실제 API를 호출하지 않음

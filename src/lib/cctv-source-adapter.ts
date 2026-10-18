@@ -1,5 +1,6 @@
 import { buildCctvSnapshot, type CctvSnapshot, type CctvSourceRuntimeStatus } from "./cctv-api";
 import { cctvFeeds, detectionEvents, type CctvFeed, type DetectionEvent } from "./cctv";
+import { buildNearbyQuery, parseCctvBounds, type NearbyBounds } from "./nearby-cctv";
 import {
   buildItsCctvInfoUrl,
   mapItsCctvRecordToFeed,
@@ -28,8 +29,7 @@ const defaultItsParams: Omit<ItsCctvInfoParams, "apiKey"> = {
   responseType: "json",
 };
 
-const maxItsCoordinateSpan = 1;
-const maxItsCoordinateArea = 0.75;
+const maxItsCoordinateSpan = 0.3;
 
 export function createMockCctvSourceAdapter({
   feeds = cctvFeeds,
@@ -101,19 +101,34 @@ function cloneSnapshot(snapshot: CctvSnapshot): CctvSnapshot {
   );
 }
 
-let configuredItsSource: { key: string; adapter: CctvSourceAdapter } | undefined;
+const configuredItsSources = new Map<string, CctvSourceAdapter>();
 
 export function getConfiguredCctvSourceAdapter(env: {
   CCTV_SOURCE_MODE?: string;
   ITS_API_KEY?: string;
-}): CctvSourceAdapter {
+}, bounds?: NearbyBounds): CctvSourceAdapter {
   const runtimeStatus = getCctvSourceRuntimeStatus(env);
+  // Serialize only the coordinate quartet, not any extra caller fields.
+  const boundsQuery = bounds ? buildNearbyQuery(bounds) : undefined;
+  const safeBounds = boundsQuery ? parseCctvBounds(new URL(boundsQuery, "https://local.invalid").searchParams) : undefined;
 
   if (runtimeStatus.effectiveMode === "its" && env.ITS_API_KEY) {
-    if (configuredItsSource?.key !== env.ITS_API_KEY) {
-      configuredItsSource = { key: env.ITS_API_KEY, adapter: createItsCctvSourceAdapter({ apiKey: env.ITS_API_KEY }) };
+    const key = JSON.stringify([env.ITS_API_KEY, boundsQuery ?? "default"]);
+    const existing = configuredItsSources.get(key);
+    if (existing) {
+      configuredItsSources.delete(key);
+      configuredItsSources.set(key, existing);
+      return existing;
     }
-    return configuredItsSource.adapter;
+    const adapter = createItsCctvSourceAdapter({
+      apiKey: env.ITS_API_KEY,
+      params: { ...defaultItsParams, ...safeBounds },
+    });
+    configuredItsSources.set(key, adapter);
+    if (configuredItsSources.size > 8) {
+      configuredItsSources.delete(configuredItsSources.keys().next().value!);
+    }
+    return adapter;
   }
 
   return createMockCctvSourceAdapter();
@@ -164,14 +179,14 @@ export function redactSourceErrorMessage(message: string): string {
 }
 
 function validateItsRequestPolicy(params: Omit<ItsCctvInfoParams, "apiKey">) {
-  const lngSpan = Math.abs(params.maxX - params.minX);
-  const latSpan = Math.abs(params.maxY - params.minY);
-  const area = lngSpan * latSpan;
-
-  if (lngSpan > maxItsCoordinateSpan || latSpan > maxItsCoordinateSpan || area > maxItsCoordinateArea) {
-    throw new Error(
-      `ITS request blocked: coordinate box too large (${lngSpan.toFixed(2)} x ${latSpan.toFixed(2)})`,
-    );
+  const lngSpan = params.maxX - params.minX;
+  const latSpan = params.maxY - params.minY;
+  if (![params.minX, params.maxX, params.minY, params.maxY].every(Number.isFinite)
+    || params.roadType !== "ex" || params.cctvType !== "4" || params.responseType !== "json"
+    || params.minX < 124 || params.maxX > 132 || params.minY < 33 || params.maxY > 39.5
+    || lngSpan <= 0 || latSpan <= 0
+    || lngSpan > maxItsCoordinateSpan + 1e-9 || latSpan > maxItsCoordinateSpan + 1e-9) {
+    throw new Error("ITS request blocked: invalid coordinate box or source policy");
   }
 }
 

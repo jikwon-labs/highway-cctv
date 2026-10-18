@@ -1,11 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 
+import { WorkspaceNavigation } from "@/components/workspace-navigation";
+import { filterCandidateFeeds, filterCandidateEvents, type DashboardView } from "@/lib/candidate-views";
 import { VideoPlayer } from "@/components/video-player";
-import { getFeedEventMarker, layoutMapMarkers, reconcileWorkspaceSelection, selectEventWorkspace, selectFeedWorkspace, type WorkspaceSelection } from "@/lib/workspace-selection";
-import type { CctvSnapshot, CctvSourceRuntimeStatus } from "@/lib/cctv-api";
-import { getCctvSourceLabel, mergeCctvSnapshot } from "@/lib/cctv-api";
+import { MonitorAddButton } from "@/components/monitor-wall";
+import { NearbyControls } from "@/components/nearby-controls";
+import { useNearbyCctv, type UserPosition } from "@/components/use-nearby-cctv";
+import { distanceKm } from "@/lib/nearby-cctv";
+import { CctvRoadMap } from "@/components/cctv-road-map";
+import { reconcileWorkspaceSelection, selectEventWorkspace, selectFeedWorkspace, type WorkspaceSelection } from "@/lib/workspace-selection";
+import type { CctvSourceRuntimeStatus } from "@/lib/cctv-api";
+import { mergeCctvSnapshot } from "@/lib/cctv-api";
 import {
   getControlRoomSummary,
   type CctvFeed,
@@ -18,7 +25,6 @@ import {
   filterFeedsByStatus,
   getEventsForFeed,
   getNextSelectedFeedId,
-  updateEventReviewStatus,
   type FeedStatusFilter,
 } from "@/lib/dashboard";
 import {
@@ -64,13 +70,6 @@ const statusClass: Record<FeedStatus, string> = {
   online: "border-[#24a148] bg-[#defbe6] text-[#0e6027]",
   degraded: "border-[#f1c21b] bg-[#fcf4d6] text-[#684e00]",
   offline: "border-[#da1e28] bg-[#fff1f1] text-[#a2191f]",
-};
-
-const statusDotClass: Record<FeedStatus, string> = {
-  unverified: "bg-[#8d8d8d]",
-  online: "bg-[#24a148]",
-  degraded: "bg-[#f1c21b]",
-  offline: "bg-[#da1e28]",
 };
 
 const sourceStatusLabel: Record<SourceReadinessStatus, string> = {
@@ -141,26 +140,43 @@ const defaultRuntimeStatus: CctvSourceRuntimeStatus = {
   notice: "샘플 데이터로 화면과 운영 흐름을 검증 중입니다.",
 };
 
-function readStoredReviewHistory(): ReviewHistoryEntry[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
+const reviewHistoryChangedEvent = "highway-cctv:review-history";
 
-  return parseReviewHistory(window.localStorage.getItem(reviewHistoryStorageKey));
+function readStoredReviewHistory(): string | null {
+  try { return window.localStorage.getItem(reviewHistoryStorageKey); }
+  catch { return null; }
+}
+
+function subscribeReviewHistory(onChange: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === reviewHistoryStorageKey || event.key === null) onChange();
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(reviewHistoryChangedEvent, onChange);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(reviewHistoryChangedEvent, onChange);
+  };
 }
 
 export function ControlRoomDashboard({
   initialFeeds,
   initialEvents,
   initialRuntimeStatus = defaultRuntimeStatus,
+  initialView = "all",
 }: {
   initialFeeds: CctvFeed[];
   initialEvents: DetectionEvent[];
   initialRuntimeStatus?: CctvSourceRuntimeStatus;
+  initialView?: DashboardView;
 }) {
   const [feeds, setFeeds] = useState(initialFeeds);
-  const [reviewHistory, setReviewHistory] = useState<ReviewHistoryEntry[]>(() => readStoredReviewHistory());
-  const [events, setEvents] = useState(() => applyReviewHistoryToEvents(initialEvents, reviewHistory));
+  const historyJson = useSyncExternalStore(subscribeReviewHistory, readStoredReviewHistory, () => null);
+  const storedHistory = useMemo(() => parseReviewHistory(historyJson), [historyJson]);
+  const [volatileHistory, setVolatileHistory] = useState<ReviewHistoryEntry[] | null>(null);
+  const reviewHistory = volatileHistory ?? storedHistory;
+  const [snapshotEvents, setEvents] = useState(initialEvents);
+  const events = useMemo(() => applyReviewHistoryToEvents(snapshotEvents, reviewHistory), [snapshotEvents, reviewHistory]);
   const [workspaceSelection, setWorkspaceSelection] = useState<WorkspaceSelection>(() =>
     selectFeedWorkspace(initialFeeds, events, initialFeeds[0]?.id ?? "") ?? { feedId: "", eventId: "" },
   );
@@ -169,29 +185,30 @@ export function ControlRoomDashboard({
   const [eventQueueFilter, setEventQueueFilter] = useState<EventQueueFilter>("needs_review");
   const [eventQueueSort, setEventQueueSort] = useState<EventQueueSort>("priority");
   const [eventSearchQuery, setEventSearchQuery] = useState("");
-  const [apiStatus, setApiStatus] = useState(initialRuntimeStatus.isRealSource ? "ITS 실제 소스 · 조회 전" : "mock 데이터 사용 중");
+  const [reviewNotice, setReviewNotice] = useState("");
   const [sourceRuntimeStatus, setSourceRuntimeStatus] = useState<CctvSourceRuntimeStatus>(initialRuntimeStatus);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [reviewTargetStatusByEventId, setReviewTargetStatusByEventId] = useState<Record<string, ReviewStatus>>({});
   const [reviewReasonByEventId, setReviewReasonByEventId] = useState<Record<string, ReviewReasonSelection>>({});
 
+  const scopedFeeds = useMemo(() => initialView === "candidates" ? filterCandidateFeeds(feeds, events) : feeds, [initialView, feeds, events]);
+  const scopedEvents = useMemo(() => initialView === "candidates" ? filterCandidateEvents(scopedFeeds, events) : events, [initialView, scopedFeeds, events]);
   const visibleFeeds = useMemo(
-    () => filterFeedsByStatus(feeds, statusFilter),
-    [feeds, statusFilter],
+    () => filterFeedsByStatus(scopedFeeds, statusFilter),
+    [scopedFeeds, statusFilter],
   );
   const selectedFeed =
-    feeds.find((feed) => feed.id === selectedFeedId) ?? visibleFeeds[0] ?? feeds[0];
-  const selectedFeedEvents = selectedFeed ? getEventsForFeed(events, selectedFeed.id) : [];
-  const eventQueueSummary = useMemo(() => buildEventQueueSummary(events), [events]);
+    scopedFeeds.find((feed) => feed.id === selectedFeedId) ?? visibleFeeds[0] ?? scopedFeeds[0];
+  const selectedFeedEvents = selectedFeed ? getEventsForFeed(scopedEvents, selectedFeed.id) : [];
+  const eventQueueSummary = useMemo(() => buildEventQueueSummary(scopedEvents), [scopedEvents]);
   const visibleQueueEvents = useMemo(
-    () => sortEventQueue(searchEventQueue(filterEventQueue(events, eventQueueFilter), feeds, eventSearchQuery), feeds, eventQueueSort),
-    [events, eventQueueFilter, eventQueueSort, eventSearchQuery, feeds],
+    () => sortEventQueue(searchEventQueue(filterEventQueue(scopedEvents, eventQueueFilter), feeds, eventSearchQuery), feeds, eventQueueSort),
+    [scopedEvents, eventQueueFilter, eventQueueSort, eventSearchQuery, feeds],
   );
   const priorityEvents = visibleQueueEvents.slice(0, 4);
   // Queue filtering must never replace the selected location with another event.
-  const selectedEvent = events.find((event) => event.id === selectedEventId && event.feedId === selectedFeed?.id);
+  const selectedEvent = scopedEvents.find((event) => event.id === selectedEventId && event.feedId === selectedFeed?.id);
   const selectedEventTimeline = selectedEvent ? buildEventTimeline(selectedEvent, reviewHistory) : [];
-  const summary = getControlRoomSummary(feeds, events);
+  const summary = getControlRoomSummary(scopedFeeds, scopedEvents);
   const sourceStatusCards = useMemo(() => buildSourceStatusCards(feeds, sourceProfiles), [feeds]);
   const sourceSummary = useMemo(
     () => getSourceReadinessSummary(sourceStatusCards),
@@ -199,23 +216,23 @@ export function ControlRoomDashboard({
   );
 
   function handleFilterChange(nextFilter: FeedStatusFilter) {
-    const nextVisibleFeeds = filterFeedsByStatus(feeds, nextFilter);
+    const nextVisibleFeeds = filterFeedsByStatus(scopedFeeds, nextFilter);
 
     setStatusFilter(nextFilter);
     setWorkspaceSelection((current) =>
-      selectFeedWorkspace(feeds, events, getNextSelectedFeedId(nextVisibleFeeds, current.feedId)) ?? current,
+      selectFeedWorkspace(scopedFeeds, scopedEvents, getNextSelectedFeedId(nextVisibleFeeds, current.feedId)) ?? current,
     );
   }
 
   function handleSelectFeed(feedId: string) {
-    const selection = selectFeedWorkspace(feeds, events, feedId);
+    const selection = selectFeedWorkspace(scopedFeeds, scopedEvents, feedId);
     if (!selection) return;
     setWorkspaceSelection(selection);
     if (!visibleFeeds.some((feed) => feed.id === feedId)) setStatusFilter("all");
   }
 
   function handleSelectEvent(eventId: string) {
-    const selection = selectEventWorkspace(feeds, events, eventId);
+    const selection = selectEventWorkspace(scopedFeeds, scopedEvents, eventId);
     if (!selection) return;
     setWorkspaceSelection(selection);
     if (!visibleFeeds.some((feed) => feed.id === selection.feedId)) setStatusFilter("all");
@@ -254,53 +271,66 @@ export function ControlRoomDashboard({
       ...reviewHistory,
     ].slice(0, 50);
 
-    setReviewHistory(nextHistory);
-    window.localStorage.setItem(reviewHistoryStorageKey, serializeReviewHistory(nextHistory));
-    setEvents((currentEvents) => updateEventReviewStatus(currentEvents, eventId, reviewStatus));
-  }
-
-  async function handleRefresh() {
-    setIsRefreshing(true);
-    setApiStatus("데이터 갱신 중");
-
     try {
-      const response = await fetch("/api/cctv", { cache: "no-store" });
-
-      if (!response.ok) {
-        throw new Error(`API ${response.status}`);
-      }
-
-      const snapshot = (await response.json()) as CctvSnapshot;
-      const mergedSnapshot = mergeCctvSnapshot(snapshot, events);
-      setFeeds(mergedSnapshot.feeds);
-      setEvents(mergedSnapshot.events);
-      setWorkspaceSelection((current) =>
-        reconcileWorkspaceSelection(mergedSnapshot.feeds, mergedSnapshot.events, current),
-      );
-      setSourceRuntimeStatus(snapshot.meta.runtimeStatus ?? defaultRuntimeStatus);
-      setApiStatus(`${getCctvSourceLabel(snapshot.meta.source)} · ${snapshot.meta.generatedAt.slice(11, 19)} 갱신`);
-    } catch (error) {
-      setApiStatus(error instanceof Error ? `갱신 실패 · ${error.message}` : "갱신 실패");
-    } finally {
-      setIsRefreshing(false);
+      window.localStorage.setItem(reviewHistoryStorageKey, serializeReviewHistory(nextHistory));
+      setVolatileHistory(null);
+      setReviewNotice("");
+      window.dispatchEvent(new Event(reviewHistoryChangedEvent));
+    } catch {
+      setVolatileHistory(nextHistory);
+      setReviewNotice("검토는 반영했지만 브라우저에 저장하지 못했습니다. 새로고침하면 사라집니다.");
     }
   }
+
+  const nearby = useNearbyCctv({
+    initialApiStatus: initialRuntimeStatus.isRealSource ? "ITS 실제 소스 · 조회 전" : "mock 데이터 사용 중",
+    onSnapshot(snapshot, selectNearest) {
+      const merged = mergeCctvSnapshot(snapshot, events);
+      const nextEvents = applyReviewHistoryToEvents(merged.events, reviewHistory);
+      const nextFeeds = initialView === "candidates" ? filterCandidateFeeds(merged.feeds, nextEvents) : merged.feeds;
+      setFeeds(merged.feeds);
+      setEvents(merged.events);
+      setWorkspaceSelection((current) => selectNearest
+        ? selectFeedWorkspace(nextFeeds, nextEvents, nextFeeds[0]?.id ?? "") ?? { feedId: "", eventId: "" }
+        : reconcileWorkspaceSelection(nextFeeds, nextEvents, current));
+      if (selectNearest) setStatusFilter("all");
+      setSourceRuntimeStatus(snapshot.meta.runtimeStatus ?? defaultRuntimeStatus);
+    },
+    onClear() {
+      const restoredEvents = applyReviewHistoryToEvents(initialEvents, reviewHistory);
+      const restoredFeeds = initialView === "candidates" ? filterCandidateFeeds(initialFeeds, restoredEvents) : initialFeeds;
+      setFeeds(initialFeeds);
+      setEvents(initialEvents);
+      setWorkspaceSelection(selectFeedWorkspace(restoredFeeds, restoredEvents, restoredFeeds[0]?.id ?? "") ?? { feedId: "", eventId: "" });
+      setStatusFilter("all");
+      setSourceRuntimeStatus(initialRuntimeStatus);
+    },
+  });
 
   return (
     <main className="min-h-screen bg-[#f4f4f4] text-[#161616]">
       <Header
-        apiStatus={apiStatus}
-        isRefreshing={isRefreshing}
+        view={initialView}
+        apiStatus={reviewNotice || nearby.apiStatus}
+        isRefreshing={nearby.isRefreshing}
         sourceRuntimeStatus={sourceRuntimeStatus}
-        onRefresh={handleRefresh}
+        onRefresh={nearby.onRefresh}
       />
 
       <div className="mx-auto flex min-h-screen w-full max-w-[1584px] flex-col gap-4 px-4 py-4 md:px-8">
+        <WorkspaceNavigation active={initialView} />
+        <NearbyControls status={nearby.status} message={nearby.message} hasLocation={!!nearby.position} onLocate={nearby.onLocate} onClear={nearby.onClear} />
+        {initialView === "candidates" && <section className="border border-[#e0e0e0] bg-white p-4 text-sm leading-6 text-[#525252]">
+          <h2 className="font-medium text-[#161616]">후보 감지 지점 · {scopedFeeds.length}곳</h2>
+          <p>검토 대기·확인 후보가 있는 CCTV만 표시합니다. 오탐은 제외하며, 사고 확정 목록이 아닙니다.</p>
+          {sourceRuntimeStatus.isRealSource && <p>실제 CCTV의 자동 영상 감지는 아직 연결되지 않았습니다. 후보 없음은 사고 없음을 뜻하지 않습니다.</p>}
+        </section>}
         <SummaryCards summary={summary} />
 
         <section className="grid flex-1 gap-4 xl:grid-cols-[336px_minmax(0,1fr)_392px]">
           <FeedList
             feeds={visibleFeeds}
+            userPosition={nearby.position}
             selectedFeedId={selectedFeed?.id ?? ""}
             statusFilter={statusFilter}
             onSelectFeed={handleSelectFeed}
@@ -309,8 +339,9 @@ export function ControlRoomDashboard({
           {selectedFeed ? (
             <VideoWorkspace
               feed={selectedFeed}
-              feeds={feeds}
-              allEvents={events}
+              userPosition={nearby.position}
+              feeds={scopedFeeds}
+              allEvents={scopedEvents}
               onSelectEvent={handleSelectEvent}
               events={selectedFeedEvents}
               selectedEvent={selectedEvent}
@@ -318,7 +349,7 @@ export function ControlRoomDashboard({
               onSelectFeed={handleSelectFeed}
             />
           ) : (
-            <EmptyPanel />
+            initialView === "candidates" ? <section className="border border-[#e0e0e0] bg-white p-6 text-sm text-[#525252]">감지 후보가 있는 지점이 없습니다. 전체 CCTV 화면에서 다른 지점을 볼 수 있습니다.</section> : <EmptyPanel />
           )}
           <RightRail
             sourceStatusCards={sourceStatusCards}
@@ -361,11 +392,13 @@ export function ControlRoomDashboard({
 }
 
 function Header({
+  view,
   apiStatus,
   isRefreshing,
   sourceRuntimeStatus,
   onRefresh,
 }: {
+  view: DashboardView;
   apiStatus: string;
   isRefreshing: boolean;
   sourceRuntimeStatus: CctvSourceRuntimeStatus;
@@ -378,7 +411,7 @@ function Header({
       <div className="mx-auto flex max-w-[1584px] flex-col gap-5 px-4 py-5 md:px-8 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="mb-2 font-mono text-xs text-[#c6c6c6]">Highway CCTV Control</p>
-          <h1 className="text-3xl font-normal tracking-[-0.03em] md:text-5xl">고속도로 CCTV 관제</h1>
+          <h1 className="text-3xl font-normal tracking-[-0.03em] md:text-5xl">{view === "candidates" ? "후보 감지 지점" : "고속도로 CCTV 관제"}</h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-[#c6c6c6] md:text-base">
             공개 CCTV 상태와 감지 후보를 한 화면에서 확인합니다. 자동 판정은 하지 않고, 운영자가 직접 확인합니다.
           </p>
@@ -435,12 +468,14 @@ function SummaryCards({ summary }: { summary: ReturnType<typeof getControlRoomSu
 
 function FeedList({
   feeds,
+  userPosition,
   selectedFeedId,
   statusFilter,
   onSelectFeed,
   onFilterChange,
 }: {
   feeds: CctvFeed[];
+  userPosition?: UserPosition;
   selectedFeedId: string;
   statusFilter: FeedStatusFilter;
   onSelectFeed: (feedId: string) => void;
@@ -485,6 +520,7 @@ function FeedList({
               <StatusPill status={feed.status} />
             </div>
             <div className="mt-4 grid grid-cols-2 gap-y-1 font-mono text-xs text-[#6f6f6f]">
+              {userPosition && <span className="col-span-2">{distanceKm(userPosition, feed.coordinates).toFixed(1)} km · 직선거리</span>}
               <span>{feed.streamType}</span>
               <span>{feed.status === "unverified" ? "지연 미측정" : `${feed.latencySeconds}s`}</span>
               <span>{feed.coordinates.lat.toFixed(3)}</span>
@@ -498,9 +534,10 @@ function FeedList({
 }
 
 function VideoWorkspace({
-  feed, feeds, events, allEvents, selectedEvent, eventTimeline, onSelectFeed, onSelectEvent,
+  feed, feeds, events, allEvents, selectedEvent, eventTimeline, onSelectFeed, onSelectEvent, userPosition,
 }: {
   feed: CctvFeed;
+  userPosition?: UserPosition;
   feeds: CctvFeed[];
   events: DetectionEvent[];
   allEvents: DetectionEvent[];
@@ -521,11 +558,14 @@ function VideoWorkspace({
             {feed.location} · {feed.source} · {feed.lastCheckedAt}
           </p>
         </div>
-        <StatusPill status={feed.status} />
+        <div className="flex flex-col items-start gap-3">
+          <StatusPill status={feed.status} />
+          <MonitorAddButton key={feed.id} feed={feed} />
+        </div>
       </div>
 
       <div className="flex flex-1 flex-col gap-4 p-4">
-        <CctvMap feeds={feeds} events={allEvents} selectedFeed={feed} onSelectFeed={onSelectFeed} />
+        <CctvRoadMap feeds={feeds} events={allEvents} selectedFeedId={feed.id} onSelectFeed={onSelectFeed} userPosition={userPosition} />
         <VideoPlayer feed={feed} />
         <p className="text-sm text-[#525252]" aria-live="polite">
           {feed.name} 영상 · {selectedEvent ? `선택 후보: ${selectedEvent.label}` : "선택된 후보 없음"}
@@ -615,111 +655,6 @@ function DetailMetric({ label, value }: { label: string; value: string }) {
     <div className="bg-white p-4">
       <p className="font-mono text-xs text-[#525252]">{label}</p>
       <p className="mt-2 text-lg text-[#161616]">{value}</p>
-    </div>
-  );
-}
-
-function CctvMap({
-  feeds, events, selectedFeed, onSelectFeed,
-}: {
-  feeds: CctvFeed[];
-  events: DetectionEvent[];
-  selectedFeed: CctvFeed;
-  onSelectFeed: (feedId: string) => void;
-}) {
-  const markerPoints = layoutMapMarkers(feeds);
-  return (
-    <section aria-label="CCTV 지도" className="border border-[#e0e0e0] bg-[#f4f4f4]">
-      <div className="border-b border-[#e0e0e0] bg-white p-4">
-        <p className="font-mono text-xs text-[#525252]">지도 화면 · 좌표 기반 개략도 (겹침 방지 배치)</p>
-        <h3 className="mt-1 text-xl font-normal text-[#161616]">CCTV 위치 선택</h3>
-        <p className="mt-2 text-sm text-[#525252]">지점을 선택하면 영상과 연결 후보를 함께 확인합니다.</p>
-        <p className="mt-2 text-xs leading-5 text-[#525252]">점: 영상 연결 상태 · 숫자: 후보 건수(오탐 제외) · 빨강: 긴급 · 노랑: 주의 · 파랑 테두리: 선택</p>
-      </div>
-
-      <div className="relative h-[360px] overflow-hidden bg-[#eef2f3]">
-        <MapBackground />
-        {/* An inset keeps edge labels and touch targets inside narrow viewports. */}
-        <div className="absolute inset-x-12 inset-y-4">
-          {feeds.map((feed) => {
-            const point = markerPoints[feed.id];
-            const selected = feed.id === selectedFeed.id;
-            const marker = getFeedEventMarker(events, feed.id);
-            const markerClass = marker.severity === "critical"
-              ? "border-[#da1e28] bg-[#fff1f1]" : marker.count > 0
-                ? "border-[#b28600] bg-[#fcf4d6]" : "border-[#8d8d8d] bg-white";
-            return (
-              <button
-                key={feed.id}
-                aria-label={`지도에서 ${feed.name} 선택`}
-                aria-pressed={selected}
-                title={`${feed.name} · ${statusLabel[feed.status]} · 후보 ${marker.count}건 · 검토 대기 ${marker.needsReview}건`}
-                data-event-count={marker.count}
-                data-severity={marker.severity ?? "none"}
-                className={`absolute flex min-h-11 -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 border px-2 py-1 text-xs shadow-sm transition hover:bg-[#edf5ff] focus-visible:z-30 focus-visible:outline-2 focus-visible:outline-[#0f62fe] ${markerClass} ${selected ? "z-20 ring-2 ring-[#0f62fe]" : "z-10"}`}
-                style={{ left: `${point.x}%`, top: `${point.y}%` }}
-                type="button"
-                onClick={() => onSelectFeed(feed.id)}
-              >
-                <span className={`h-2.5 w-2.5 shrink-0 rounded-full border border-white ${statusDotClass[feed.status]}`} />
-                <span className="max-w-16 truncate text-[#161616]">{feed.name}</span>
-                {marker.count > 0 ? (
-                  <span className={`px-1.5 py-0.5 font-mono ${marker.severity === "critical" ? "bg-[#da1e28] text-white" : "bg-[#f1c21b] text-[#161616]"}`}>
-                    {marker.count}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-px border-t border-[#c6c6c6] bg-[#c6c6c6] md:grid-cols-4">
-        <MapInfo label="선택" value={selectedFeed.name} />
-        <MapInfo label="노선" value={selectedFeed.route} />
-        <MapInfo label="방향" value={selectedFeed.direction} />
-        <MapInfo label="후보 / 검토 대기" value={`${getFeedEventMarker(events, selectedFeed.id).count} / ${getFeedEventMarker(events, selectedFeed.id).needsReview}건`} />
-      </div>
-    </section>
-  );
-}
-
-function MapBackground() {
-  return (
-    <svg
-      className="absolute inset-0 h-full w-full"
-      role="img"
-      aria-label="수도권 고속도로 개략 지도"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-    >
-      <rect width="100" height="100" fill="#eef2f3" />
-      <path d="M4 66 C 25 58, 43 54, 96 60" fill="none" stroke="#c6c6c6" strokeWidth="1.3" />
-      <path d="M16 22 C 34 38, 44 48, 60 92" fill="none" stroke="#c6c6c6" strokeWidth="1.2" />
-      <path d="M8 84 C 26 74, 42 66, 78 70" fill="none" stroke="#d0d7da" strokeWidth="0.9" />
-      <path d="M66 10 C 64 32, 70 50, 92 88" fill="none" stroke="#d0d7da" strokeWidth="0.9" />
-      <path d="M52 18 C 40 34, 36 56, 44 92" fill="none" stroke="#ffffff" strokeWidth="0.35" strokeDasharray="2 2" />
-      <path d="M8 46 H 96" fill="none" stroke="#ffffff" strokeWidth="0.35" strokeDasharray="2 2" />
-      <text x="6" y="12" fill="#6f6f6f" fontSize="4" fontFamily="monospace">
-        N
-      </text>
-      <text x="79" y="18" fill="#8d8d8d" fontSize="3.2" fontFamily="monospace">
-        중부
-      </text>
-      <text x="12" y="79" fill="#8d8d8d" fontSize="3.2" fontFamily="monospace">
-        서해안
-      </text>
-      <text x="40" y="51" fill="#8d8d8d" fontSize="3.2" fontFamily="monospace">
-        경부
-      </text>
-    </svg>
-  );
-}
-
-function MapInfo({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-white px-3 py-2">
-      <p className="font-mono text-[11px] text-[#6f6f6f]">{label}</p>
-      <p className="mt-1 truncate text-sm text-[#161616]">{value}</p>
     </div>
   );
 }

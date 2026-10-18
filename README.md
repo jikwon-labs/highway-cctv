@@ -7,7 +7,10 @@
 - Next.js App Router + TypeScript + Tailwind CSS 기반 웹 앱
 - CCTV 피드 목록/상태/지연시간 샘플 데이터
 - 선택 CCTV 관제 플레이스홀더
-- 좌표 기반 CCTV 개략도, 후보 건수/긴급도 배지, 선택 강조
+- Leaflet/OpenStreetMap 실제 도로 지도, 정확한 CCTV 좌표·후보 건수/긴급도·선택 강조
+- 위치 동의 후 주변 고속도로 CCTV 직선거리 정렬, 사용 중지·늦은 응답 무효화
+- `/monitor`: 선택 CCTV 최대 4대의 TV형 화면, localStorage 선택·순서 복원
+- `/events`: 오탐 제외 후보 감지 지점만 모아보는 화면
 - 지도·CCTV 목록·이벤트 상세의 양방향 선택 연동
 - 검색/큐 필터와 독립적인 선택 지점 유지 및 지점별 후보 선택
 - 소스 상태/라이선스/저장 제한 패널
@@ -33,7 +36,8 @@
 - API 키 마스킹 유틸
 - 실응답 숫자 필드 지원 및 실제 모드의 샘플 결과 분리
 - 작은 기본 조회 구역, process-local 캐시/동시 요청 합치기, 10초 timeout
-- 명시적 영상 연결/중지와 재생 미확인 상태 (가상 분석 박스 제거)
+- 명시적 영상 연결/중지/다시 연결, MSE HLS.js 우선 경로와 오류 분류
+- GPS 메모리 전용·서버에는 격자화 bbox만 전달, 구역별 최대 8개 LRU/캐시
 - Vitest 단위 테스트
 
 ## 원칙
@@ -44,6 +48,8 @@
 - 실제 ITS 테스트는 `.env.local`에만 키를 넣고 `/api/cctv` 단일 호출로 먼저 확인합니다.
 
 API 발급 준비는 [API 설정 안내](docs/api-setup.md), 지도 연동 검증은 [QA 기록](docs/qa-map-workspace.md), 실제 ITS 정보 조회 검증은 [실연동 기록](docs/its-live-validation.md)을 참고합니다.
+
+화면별 사용법과 저장 범위는 [모니터링 화면 계약](docs/monitoring-workspaces.md), 최신 검증은 [통합 QA](docs/qa-monitoring-workspaces.md), 재생 오류 진단은 [진단 기록](docs/playback-diagnosis.md)에 있습니다. 실제 CCTV 자동 감지기는 아직 연결하지 않았습니다.
 
 ## 실행
 
