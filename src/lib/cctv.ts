@@ -1,4 +1,4 @@
-export type FeedStatus = "online" | "degraded" | "offline";
+export type FeedStatus = "online" | "degraded" | "offline" | "unverified";
 
 export type EventSeverity = "critical" | "warning" | "info";
 

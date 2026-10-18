@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { cctvFeeds, detectionEvents } from "./cctv";
 import {
@@ -170,6 +170,53 @@ describe("CCTV source adapters", () => {
       hasApiKey: true,
       isRealSource: true,
     });
+  });
+
+  it("실제 호출 기본 범위를 단일 소구역으로 제한한다", async () => {
+    let bounds: string[] = [];
+    const adapter = createItsCctvSourceAdapter({ apiKey: "fixture-key", fetcher: async (url) => {
+      bounds = ["minX", "maxX", "minY", "maxY"].map((name) => url.searchParams.get(name)!);
+      return { response: { data: [] } };
+    } });
+    await adapter.getSnapshot();
+    expect(bounds).toEqual(["127.1", "127.12", "37.32", "37.35"]);
+  });
+
+  it("같은 설정의 API 요청들은 adapter 인스턴스와 캐시를 공유한다", () => {
+    const env = { CCTV_SOURCE_MODE: "its", ITS_API_KEY: "fixture-cache-key" };
+    expect(getConfiguredCctvSourceAdapter(env)).toBe(getConfiguredCctvSourceAdapter({ ...env }));
+    expect(getConfiguredCctvSourceAdapter({ ...env, ITS_API_KEY: "fixture-other-key" })).not.toBe(getConfiguredCctvSourceAdapter(env));
+  });
+
+  it("동시에 들어온 조회는 하나의 업스트림 요청으로 합친다", async () => {
+    let calls = 0;
+    const adapter = createItsCctvSourceAdapter({ apiKey: "fixture-key", fetcher: async () => {
+      calls += 1;
+      await Promise.resolve();
+      return { response: { data: [] } };
+    } });
+    const [first, second] = await Promise.all([adapter.getSnapshot(), adapter.getSnapshot()]);
+    expect(calls).toBe(1);
+    expect(first).toEqual(second);
+    expect(first).not.toBe(second);
+  });
+
+  it("업스트림 fetch는 시간 제한과 redirect 차단을 사용한다", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ response: { data: [] } })));
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      await createItsCctvSourceAdapter({ apiKey: "fixture-key" }).getSnapshot();
+      expect(fetcher).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({
+        signal: expect.any(AbortSignal), redirect: "error", cache: "no-store",
+      }));
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it("네트워크 예외의 민감한 메시지를 밖으로 전달하지 않는다", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("fixture-sensitive-message"); }));
+    try {
+      await expect(createItsCctvSourceAdapter({ apiKey: "fixture-key" }).getSnapshot()).rejects.toThrow("ITS request failed");
+    } finally { vi.unstubAllGlobals(); }
   });
 
   it("source adapter 오류 메시지에서 API 키와 URL query를 마스킹한다", () => {

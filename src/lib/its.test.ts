@@ -57,12 +57,30 @@ describe("ITS CCTV API helpers", () => {
       direction: "확인 필요",
       location: "[경부선] 서울요금소",
       coordinates: { lat: 37.3349, lng: 127.1049 },
-      status: "online",
+      status: "unverified",
       streamType: "HTTPS HLS",
       streamUrl: "https://example.com/live.m3u8",
       source: "ITS 국가교통정보센터",
       lastCheckedAt: "18:50",
     });
+  });
+
+  it("실제 API처럼 숫자로 내려오는 좌표와 CCTV 유형을 변환한다", () => {
+    const feed = mapItsCctvRecordToFeed({
+      cctvname: "숫자 필드 검증용", cctvtype: 4,
+      coordx: 127.1049, coordy: 37.3349,
+      cctvurl: "https://example.com/live.m3u8",
+    }, 0);
+    expect(feed.coordinates).toEqual({ lat: 37.3349, lng: 127.1049 });
+    expect(feed.streamType).toBe("HTTPS HLS");
+  });
+
+  it("HTTP 200의 인증 오류와 예상 밖 응답을 빈 목록으로 숨기지 않는다", () => {
+    expect(() => parseItsCctvResponse({ resultCode: "4005", resultMsg: "fixture-sensitive-message" })).toThrow("ITS API error: 4005");
+    expect(() => parseItsCctvResponse({ response: { header: { resultCode: "4001" } } })).toThrow("ITS API error: 4001");
+    expect(() => parseItsCctvResponse(null)).toThrow("ITS response invalid");
+    expect(() => parseItsCctvResponse({ unexpected: true })).toThrow("ITS response invalid");
+    expect(parseItsCctvResponse({ response: { datacount: 0, data: [] } })).toEqual([]);
   });
 
   it("단일 data 객체와 배열 data 객체 모두 안전하게 파싱한다", () => {

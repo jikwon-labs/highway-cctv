@@ -31,6 +31,9 @@
 - ITS 실제 호출 전 좌표 박스 안전 가드, 60초 캐시, 502 오류 응답
 - `/api/cctv` runtime status와 대시보드 상단 실제/mock 모드 표시
 - API 키 마스킹 유틸
+- 실응답 숫자 필드 지원 및 실제 모드의 샘플 결과 분리
+- 작은 기본 조회 구역, process-local 캐시/동시 요청 합치기, 10초 timeout
+- 명시적 영상 연결/중지와 재생 미확인 상태 (가상 분석 박스 제거)
 - Vitest 단위 테스트
 
 ## 원칙
@@ -40,7 +43,7 @@
 - AI 결과는 확정 판정이 아니라 운영자 검토용 후보로 표시합니다.
 - 실제 ITS 테스트는 `.env.local`에만 키를 넣고 `/api/cctv` 단일 호출로 먼저 확인합니다.
 
-API 발급 준비는 [API 설정 안내](docs/api-setup.md), 지도 연동 검증은 [QA 기록](docs/qa-map-workspace.md)을 참고합니다.
+API 발급 준비는 [API 설정 안내](docs/api-setup.md), 지도 연동 검증은 [QA 기록](docs/qa-map-workspace.md), 실제 ITS 정보 조회 검증은 [실연동 기록](docs/its-live-validation.md)을 참고합니다.
 
 ## 실행
 

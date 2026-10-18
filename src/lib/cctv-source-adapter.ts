@@ -21,10 +21,10 @@ type ItsFetcher = (url: URL) => Promise<unknown>;
 const defaultItsParams: Omit<ItsCctvInfoParams, "apiKey"> = {
   roadType: "ex",
   cctvType: "4",
-  minX: 126.7,
-  maxX: 127.4,
-  minY: 37.1,
-  maxY: 37.7,
+  minX: 127.1,
+  maxX: 127.12,
+  minY: 37.32,
+  maxY: 37.35,
   responseType: "json",
 };
 
@@ -63,6 +63,7 @@ export function createItsCctvSourceAdapter({
 }): CctvSourceAdapter {
   let cachedSnapshot: CctvSnapshot | undefined;
   let cachedAtMs = 0;
+  let inFlight: Promise<CctvSnapshot> | undefined;
 
   return {
     id: "its",
@@ -73,20 +74,20 @@ export function createItsCctvSourceAdapter({
         return cloneSnapshot(cachedSnapshot);
       }
 
-      validateItsRequestPolicy(params);
-      const url = buildItsCctvInfoUrl({
-        apiKey,
-        ...params,
-      });
-      const payload = await fetcher(url);
-      const feeds = parseItsCctvResponse(
-        payload as Parameters<typeof parseItsCctvResponse>[0],
-      ).map(mapItsCctvRecordToFeed);
-
-      cachedSnapshot = buildCctvSnapshot(feeds, [], requestedAt, "its");
-      cachedAtMs = requestedAt.getTime();
-
-      return cloneSnapshot(cachedSnapshot);
+      if (!inFlight) {
+        inFlight = (async () => {
+          validateItsRequestPolicy(params);
+          const url = buildItsCctvInfoUrl({ apiKey, ...params });
+          const payload = await fetcher(url);
+          const feeds = parseItsCctvResponse(
+            payload as Parameters<typeof parseItsCctvResponse>[0],
+          ).map(mapItsCctvRecordToFeed);
+          cachedSnapshot = buildCctvSnapshot(feeds, [], requestedAt, "its");
+          cachedAtMs = now().getTime();
+          return cachedSnapshot;
+        })().finally(() => { inFlight = undefined; });
+      }
+      return cloneSnapshot(await inFlight);
     },
   };
 }
@@ -100,6 +101,8 @@ function cloneSnapshot(snapshot: CctvSnapshot): CctvSnapshot {
   );
 }
 
+let configuredItsSource: { key: string; adapter: CctvSourceAdapter } | undefined;
+
 export function getConfiguredCctvSourceAdapter(env: {
   CCTV_SOURCE_MODE?: string;
   ITS_API_KEY?: string;
@@ -107,7 +110,10 @@ export function getConfiguredCctvSourceAdapter(env: {
   const runtimeStatus = getCctvSourceRuntimeStatus(env);
 
   if (runtimeStatus.effectiveMode === "its" && env.ITS_API_KEY) {
-    return createItsCctvSourceAdapter({ apiKey: env.ITS_API_KEY });
+    if (configuredItsSource?.key !== env.ITS_API_KEY) {
+      configuredItsSource = { key: env.ITS_API_KEY, adapter: createItsCctvSourceAdapter({ apiKey: env.ITS_API_KEY }) };
+    }
+    return configuredItsSource.adapter;
   }
 
   return createMockCctvSourceAdapter();
@@ -174,11 +180,16 @@ function parseSourceMode(value: string | undefined): CctvSourceMode {
 }
 
 async function fetchItsJson(url: URL): Promise<unknown> {
-  const response = await fetch(url, { cache: "no-store" });
-
-  if (!response.ok) {
-    throw new Error(`ITS API ${response.status}`);
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) });
+  } catch (error) {
+    throw new Error(error instanceof Error && error.name === "TimeoutError" ? "ITS request timeout" : "ITS request failed");
   }
-
-  return response.json();
+  if (!response.ok) throw new Error(`ITS API ${response.status}`);
+  try {
+    return await response.json();
+  } catch {
+    throw new Error("ITS response invalid");
+  }
 }

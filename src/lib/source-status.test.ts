@@ -8,6 +8,11 @@ import {
 } from "./source-status";
 
 describe("CCTV 소스 상태 도메인", () => {
+  it("URL만 받은 CCTV는 영상 정상 대신 미확인으로 집계한다", () => {
+    const cards = buildSourceStatusCards([{ ...cctvFeeds[0], status: "unverified" }], sourceProfiles);
+    expect(cards[0].onlineFeeds).toBe(0);
+    expect(cards[0].unverifiedFeeds).toBe(1);
+  });
   it("소스별 피드 수, 연결 상태, 스트림 형식을 집계한다", () => {
     const cards = buildSourceStatusCards(cctvFeeds, sourceProfiles);
     const its = cards.find((card) => card.id === "its-national-traffic")!;

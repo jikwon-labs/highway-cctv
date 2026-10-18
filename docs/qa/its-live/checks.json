@@ -1,0 +1,71 @@
+[
+  {
+    "name": "its mode from local env and no sample results",
+    "passed": true,
+    "data": null
+  },
+  {
+    "name": "real API two CCTV, numeric parser, no fake events",
+    "passed": true,
+    "data": [
+      {
+        "status": 200,
+        "source": "its",
+        "generatedAt": "2026-10-18T10:58:33.223Z",
+        "count": 2,
+        "eventCount": 0,
+        "unverified": true,
+        "finiteCoordinates": true
+      }
+    ]
+  },
+  {
+    "name": "addresses do not imply healthy playback or zero latency",
+    "passed": true,
+    "data": null
+  },
+  {
+    "name": "manual playback gate, no video node",
+    "passed": true,
+    "data": null
+  },
+  {
+    "name": "feed selection keeps playback opt-in",
+    "passed": true,
+    "data": null
+  },
+  {
+    "name": "same process refresh cache",
+    "passed": true,
+    "data": [
+      {
+        "status": 200,
+        "source": "its",
+        "generatedAt": "2026-10-18T10:58:33.223Z",
+        "count": 2,
+        "eventCount": 0,
+        "unverified": true,
+        "finiteCoordinates": true
+      },
+      {
+        "status": 200,
+        "source": "its",
+        "generatedAt": "2026-10-18T10:58:33.223Z",
+        "count": 2,
+        "eventCount": 0,
+        "unverified": true,
+        "finiteCoordinates": true
+      }
+    ]
+  },
+  {
+    "name": "no external browser media requests",
+    "passed": true,
+    "data": null
+  },
+  {
+    "name": "no runtime errors",
+    "passed": true,
+    "data": []
+  }
+]

@@ -19,6 +19,7 @@ export type SourceStatusCard = SourceProfile & {
   onlineFeeds: number;
   degradedFeeds: number;
   offlineFeeds: number;
+  unverifiedFeeds: number;
   streamTypes: CctvFeed["streamType"][];
 };
 
@@ -68,6 +69,7 @@ export function buildSourceStatusCards(
       onlineFeeds: sourceFeeds.filter((feed) => feed.status === "online").length,
       degradedFeeds: sourceFeeds.filter((feed) => feed.status === "degraded").length,
       offlineFeeds: sourceFeeds.filter((feed) => feed.status === "offline").length,
+      unverifiedFeeds: sourceFeeds.filter((feed) => feed.status === "unverified").length,
       streamTypes: getUniqueStreamTypes(sourceFeeds),
     };
   });

@@ -18,21 +18,15 @@ export type ItsCctvInfoParams = {
 export type ItsCctvRecord = {
   roadsectionid?: string;
   filecreatetime?: string;
-  cctvtype?: string;
+  cctvtype?: string | number;
   cctvurl?: string;
   cctvresolution?: string;
-  coordx?: string;
-  coordy?: string;
+  coordx?: string | number;
+  coordy?: string | number;
   cctvformat?: string;
   cctvname?: string;
 };
 
-type ItsResponseLike = {
-  response?: {
-    data?: ItsCctvRecord | ItsCctvRecord[];
-  };
-  data?: ItsCctvRecord | ItsCctvRecord[];
-};
 
 const streamTypeLabel: Record<string, CctvFeed["streamType"]> = {
   "1": "HLS",
@@ -67,14 +61,23 @@ export function redactApiKey(url: string): string {
   return parsedUrl.toString();
 }
 
-export function parseItsCctvResponse(payload: ItsResponseLike): ItsCctvRecord[] {
-  const data = payload.response?.data ?? payload.data;
-
-  if (!data) {
-    return [];
+export function parseItsCctvResponse(payload: unknown): ItsCctvRecord[] {
+  const object = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value);
+  if (!object(payload)) throw new Error("ITS response invalid");
+  const root = object(payload.response) ? payload.response : payload;
+  const header = object(root.header) ? root.header : {};
+  const code = root.resultCode ?? header.resultCode;
+  if (code !== undefined && !["0", "SUCCESS"].includes(String(code))) {
+    // Never echo provider messages, which may contain credentials or URLs.
+    const safeCode = /^\d{1,5}$/.test(String(code)) ? String(code) : "unknown";
+    throw new Error(`ITS API error: ${safeCode}`);
   }
-
-  return Array.isArray(data) ? data : [data];
+  if (root.data === undefined && (root.datacount === 0 || root.datacount === "0")) return [];
+  const data = root.data;
+  const records = Array.isArray(data) ? data : object(data) ? [data] : undefined;
+  if (!records || !records.every(object)) throw new Error("ITS response invalid");
+  return records as ItsCctvRecord[];
 }
 
 export function mapItsCctvRecordToFeed(record: ItsCctvRecord, index: number): CctvFeed {
@@ -95,7 +98,7 @@ export function mapItsCctvRecordToFeed(record: ItsCctvRecord, index: number): Cc
       lat: parseCoordinate(record.coordy),
       lng: parseCoordinate(record.coordx),
     },
-    status: streamUrl ? "online" : "offline",
+    status: streamUrl ? "unverified" : "offline",
     streamType,
     streamUrl: streamUrl || undefined,
     latencySeconds: 0,
@@ -120,7 +123,7 @@ function inferStreamType(url: string, format?: string): CctvFeed["streamType"] {
   return "SNAPSHOT";
 }
 
-function parseCoordinate(value?: string): number {
+function parseCoordinate(value?: string | number): number {
   const parsed = Number(sanitizeText(value).replace(/;$/, ""));
   return Number.isFinite(parsed) ? parsed : 0;
 }
@@ -133,6 +136,6 @@ function formatItsTimestamp(value: string): string {
   return "확인 필요";
 }
 
-function sanitizeText(value?: string): string {
-  return (value ?? "").trim().replace(/;$/, "");
+function sanitizeText(value?: string | number): string {
+  return String(value ?? "").trim().replace(/;$/, "");
 }

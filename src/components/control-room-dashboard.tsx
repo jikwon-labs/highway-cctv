@@ -53,18 +53,21 @@ import {
 } from "@/lib/source-status";
 
 const statusLabel: Record<FeedStatus, string> = {
+  unverified: "재생 미확인",
   online: "정상",
   degraded: "지연",
   offline: "끊김",
 };
 
 const statusClass: Record<FeedStatus, string> = {
+  unverified: "border-[#8d8d8d] bg-[#f4f4f4] text-[#525252]",
   online: "border-[#24a148] bg-[#defbe6] text-[#0e6027]",
   degraded: "border-[#f1c21b] bg-[#fcf4d6] text-[#684e00]",
   offline: "border-[#da1e28] bg-[#fff1f1] text-[#a2191f]",
 };
 
 const statusDotClass: Record<FeedStatus, string> = {
+  unverified: "bg-[#8d8d8d]",
   online: "bg-[#24a148]",
   degraded: "bg-[#f1c21b]",
   offline: "bg-[#da1e28]",
@@ -105,6 +108,7 @@ const filterOptions: Array<{ label: string; value: FeedStatusFilter }> = [
   { label: "정상", value: "online" },
   { label: "지연", value: "degraded" },
   { label: "끊김", value: "offline" },
+  { label: "미확인", value: "unverified" },
 ];
 
 const eventQueueFilterOptions: Array<{ label: string; value: EventQueueFilter }> = [
@@ -148,9 +152,11 @@ function readStoredReviewHistory(): ReviewHistoryEntry[] {
 export function ControlRoomDashboard({
   initialFeeds,
   initialEvents,
+  initialRuntimeStatus = defaultRuntimeStatus,
 }: {
   initialFeeds: CctvFeed[];
   initialEvents: DetectionEvent[];
+  initialRuntimeStatus?: CctvSourceRuntimeStatus;
 }) {
   const [feeds, setFeeds] = useState(initialFeeds);
   const [reviewHistory, setReviewHistory] = useState<ReviewHistoryEntry[]>(() => readStoredReviewHistory());
@@ -163,8 +169,8 @@ export function ControlRoomDashboard({
   const [eventQueueFilter, setEventQueueFilter] = useState<EventQueueFilter>("needs_review");
   const [eventQueueSort, setEventQueueSort] = useState<EventQueueSort>("priority");
   const [eventSearchQuery, setEventSearchQuery] = useState("");
-  const [apiStatus, setApiStatus] = useState("mock 데이터 사용 중");
-  const [sourceRuntimeStatus, setSourceRuntimeStatus] = useState<CctvSourceRuntimeStatus>(defaultRuntimeStatus);
+  const [apiStatus, setApiStatus] = useState(initialRuntimeStatus.isRealSource ? "ITS 실제 소스 · 조회 전" : "mock 데이터 사용 중");
+  const [sourceRuntimeStatus, setSourceRuntimeStatus] = useState<CctvSourceRuntimeStatus>(initialRuntimeStatus);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [reviewTargetStatusByEventId, setReviewTargetStatusByEventId] = useState<Record<string, ReviewStatus>>({});
   const [reviewReasonByEventId, setReviewReasonByEventId] = useState<Record<string, ReviewReasonSelection>>({});
@@ -408,7 +414,7 @@ function Header({
 
 function SummaryCards({ summary }: { summary: ReturnType<typeof getControlRoomSummary> }) {
   const cards = [
-    { label: "CCTV", value: summary.totalFeeds, helper: `${summary.onlineFeeds} 정상, ${summary.degradedFeeds} 지연` },
+    { label: "CCTV", value: summary.totalFeeds, helper: `${summary.onlineFeeds} 정상, ${summary.degradedFeeds} 지연, ${summary.totalFeeds - summary.onlineFeeds - summary.degradedFeeds - summary.offlineFeeds} 미확인` },
     { label: "감지 후보", value: summary.activeEvents, helper: `${summary.criticalEvents} 긴급, ${summary.needsReview} 검토 대기` },
     { label: "끊김", value: summary.offlineFeeds, helper: "URL 만료 또는 접근 실패" },
     { label: "운영 기준", value: "검토", helper: "사람 확인 전 확정하지 않음" },
@@ -444,7 +450,7 @@ function FeedList({
     <aside className="border border-[#e0e0e0] bg-white">
       <PanelHeader title="CCTV" description="소수 지점으로 연결 상태를 확인합니다." count={`${feeds.length}개`} />
 
-      <div className="grid grid-cols-4 border-b border-[#e0e0e0] text-sm">
+      <div className="grid grid-cols-5 border-b border-[#e0e0e0] text-sm">
         {filterOptions.map((option) => (
           <button
             key={option.value}
@@ -480,7 +486,7 @@ function FeedList({
             </div>
             <div className="mt-4 grid grid-cols-2 gap-y-1 font-mono text-xs text-[#6f6f6f]">
               <span>{feed.streamType}</span>
-              <span>{feed.latencySeconds}s</span>
+              <span>{feed.status === "unverified" ? "지연 미측정" : `${feed.latencySeconds}s`}</span>
               <span>{feed.coordinates.lat.toFixed(3)}</span>
               <span>{feed.coordinates.lng.toFixed(3)}</span>
             </div>
@@ -821,10 +827,11 @@ function SourceStatusPanel({
               </span>
             </div>
 
-            <dl className="mt-3 grid grid-cols-3 gap-px bg-[#e0e0e0] text-xs">
+            <dl className="mt-3 grid grid-cols-4 gap-px bg-[#e0e0e0] text-xs">
               <SourceState label="정상" value={card.onlineFeeds} />
               <SourceState label="지연" value={card.degradedFeeds} />
               <SourceState label="끊김" value={card.offlineFeeds} />
+              <SourceState label="미확인" value={card.unverifiedFeeds} />
             </dl>
 
             <div className="mt-3 space-y-1 text-sm text-[#525252]">
